@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { formatApiError, isAbortError } from "../api/errors";
 import type { CreateSource, Source, Still } from "../api/types";
+import { addSourceRequested, clearAddSourceRequest, subscribeAddSource } from "../lib/addSourceRequest";
 import { collectAlbums, photoLabel, sourceConnectionText, type Album, type FolderFailure, type FolderPhase } from "../lib/albums";
 import type { GallerySection } from "../lib/route";
 import { sectionHash, SECTION_LABEL } from "../lib/route";
@@ -33,6 +34,20 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
   const [stillsError, setStillsError] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+
+  useEffect(() => {
+    const openIfRequested = () => {
+      if (addSourceRequested()) setAddOpen(true);
+    };
+    openIfRequested();
+    return subscribeAddSource(openIfRequested);
+  }, []);
+
+  useEffect(() => {
+    if (!addOpen) return;
+    const id = window.setTimeout(() => clearAddSourceRequest(), 0);
+    return () => window.clearTimeout(id);
+  }, [addOpen]);
   const [pendingRemove, setPendingRemove] = useState<Source | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);

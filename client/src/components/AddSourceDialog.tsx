@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import { formatApiError, isAbortError } from "../api/errors";
 import type { CreateSource } from "../api/types";
 import { toCreateSource, type SourceDraft } from "../lib/forms";
+import { PHONE_QUERY, useMediaQuery } from "../lib/hooks";
+import { usePrefs } from "../lib/prefs";
 import { Dialog } from "./Dialog";
 
 const explanation =
@@ -14,11 +16,38 @@ type AddSourceDialogProps = {
 };
 
 export function AddSourceDialog({ onClose, onCreate }: AddSourceDialogProps) {
+  const { prefs } = usePrefs();
+  const mobile = useMediaQuery(PHONE_QUERY);
+  const phoneActions = !mobile ? undefined : prefs.mobileLayout === 3 ? "sticky" : "scroll";
+  const actionsRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<SourceDraft>({ type: "local", rootPath: "", label: "" });
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (phoneActions !== "scroll") return;
+    const row = actionsRef.current;
+    if (!row) return;
+
+    const bringIntoView = () => {
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement
+      ) {
+        active.scrollIntoView({ block: "center", inline: "nearest" });
+        return;
+      }
+      row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", bringIntoView);
+    return () => viewport?.removeEventListener("resize", bringIntoView);
+  }, [phoneActions]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -55,8 +84,9 @@ export function AddSourceDialog({ onClose, onCreate }: AddSourceDialogProps) {
   }
 
   return (
-    <Dialog title="Add source" description={explanation} onClose={onClose}>
+    <Dialog title="Add source" description={explanation} onClose={onClose} phoneActions={phoneActions}>
       <form onSubmit={onSubmit}>
+        <div className="dialog-scroll">
         <fieldset className="choice">
           <legend>Source type</legend>
           <label>
@@ -217,8 +247,9 @@ export function AddSourceDialog({ onClose, onCreate }: AddSourceDialogProps) {
             {error}
           </p>
         ) : null}
+        </div>
 
-        <div className="dialog-actions">
+        <div className="dialog-actions" ref={actionsRef}>
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
