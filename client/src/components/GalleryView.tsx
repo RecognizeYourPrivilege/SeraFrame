@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { formatApiError, isAbortError } from "../api/errors";
 import type { CreateSource, Source, Still } from "../api/types";
-import { collectAlbums, photoLabel, type Album } from "../lib/albums";
+import { collectAlbums, photoLabel, sourceConnectionText, type Album, type FolderFailure, type FolderPhase } from "../lib/albums";
 import type { GallerySection } from "../lib/route";
 import { sectionHash, SECTION_LABEL } from "../lib/route";
 import { AddSourceDialog } from "./AddSourceDialog";
@@ -23,7 +23,8 @@ type GalleryViewProps = {
 export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, chromeHidden }: GalleryViewProps) {
   const [sources, setSources] = useState<Source[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
-  const [failures, setFailures] = useState<string[]>([]);
+  const [failures, setFailures] = useState<FolderFailure[]>([]);
+  const [folderStatus, setFolderStatus] = useState<FolderPhase>("loading");
   const [libraryStatus, setLibraryStatus] = useState<"loading" | "ready" | "error">("loading");
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -41,21 +42,34 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
 
   useEffect(() => {
     const controller = new AbortController();
-    setLibraryStatus("loading");
+    setFolderStatus("loading");
+    setAlbums([]);
+    setFailures([]);
     api
       .listSources({ signal: controller.signal })
       .then(async (res) => {
-        const collected = await collectAlbums(res.sources, controller.signal);
         if (controller.signal.aborted) return;
         setSources(res.sources);
-        setAlbums(collected.albums);
-        setFailures(collected.failures);
         setLibraryStatus("ready");
+        setLibraryError(null);
+        const nextAlbums: Album[] = [];
+        const nextFailures: FolderFailure[] = [];
+        for (const source of res.sources) {
+          const collected = await collectAlbums([source], controller.signal);
+          if (controller.signal.aborted) return;
+          nextAlbums.push(...collected.albums);
+          nextFailures.push(...collected.failures);
+          setAlbums(nextAlbums.slice());
+          setFailures(nextFailures.slice());
+        }
+        if (controller.signal.aborted) return;
+        setFolderStatus("ready");
       })
       .catch((err: unknown) => {
         if (isAbortError(err) || controller.signal.aborted) return;
         setLibraryStatus("error");
         setLibraryError(formatApiError(err) || "Could not load the library.");
+        setFolderStatus("ready");
       });
     return () => controller.abort();
   }, [reloadToken]);
@@ -124,7 +138,13 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
   const albumTitle = openAlbum?.title || album?.path.split("/").filter(Boolean).pop() || "Album";
 
   async function createSource(body: CreateSource) {
-    await api.createSource(body);
+    const created = await api.createSource(body);
+    setSources((current) =>
+      current.some((source) => source.id === created.source.id) ? current : [...current, created.source],
+    );
+    setLibraryStatus("ready");
+    setLibraryError(null);
+    setFolderStatus("loading");
     setReloadToken((value) => value + 1);
   }
 
@@ -165,7 +185,10 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
           stills={visibleStills}
           fit={fit}
           blur={blurThumbs}
-          onRetry={() => setReloadToken((value) => value + 1)}
+          onRetry={() => {
+            setLibraryStatus("loading");
+            setReloadToken((value) => value + 1);
+          }}
           onOpen={setLightboxIndex}
         />
       ) : section === "albums" ? (
@@ -173,12 +196,16 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
           sources={sources}
           albums={visibleAlbums}
           status={libraryStatus}
+          folderStatus={folderStatus}
           error={libraryError}
           failures={failures}
           searching={needle.length > 0}
           fit={fit}
           blur={blurThumbs}
-          onRetry={() => setReloadToken((value) => value + 1)}
+          onRetry={() => {
+            setLibraryStatus("loading");
+            setReloadToken((value) => value + 1);
+          }}
           onAdd={() => setAddOpen(true)}
           onRemove={(source) => {
             setRemoveError(null);
@@ -187,15 +214,20 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
         />
       ) : (
         <Library
+          sources={sources}
           albums={visibleAlbums}
           itemCount={itemCount}
           status={libraryStatus}
+          folderStatus={folderStatus}
           error={libraryError}
           failures={failures}
           searching={needle.length > 0}
           fit={fit}
           blur={blurThumbs}
-          onRetry={() => setReloadToken((value) => value + 1)}
+          onRetry={() => {
+            setLibraryStatus("loading");
+            setReloadToken((value) => value + 1);
+          }}
           onAdd={() => setAddOpen(true)}
         />
       )}
@@ -240,9 +272,11 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
 }
 
 function Library({
+  sources,
   albums,
   itemCount,
   status,
+  folderStatus,
   error,
   failures,
   searching,
@@ -251,17 +285,22 @@ function Library({
   onRetry,
   onAdd,
 }: {
+  sources: Source[];
   albums: Album[];
   itemCount: number;
   status: "loading" | "ready" | "error";
+  folderStatus: FolderPhase;
   error: string | null;
-  failures: string[];
+  failures: FolderFailure[];
   searching: boolean;
   fit: "cover" | "contain";
   blur: boolean;
   onRetry: () => void;
   onAdd: () => void;
 }) {
+  const visibleSources = sources.filter((source) =>
+    searching ? albums.some((item) => item.sourceId === source.id) : true,
+  );
   return (
     <>
       <header className="page-head">
@@ -272,29 +311,29 @@ function Library({
       </header>
       <Status status={status} error={error} onRetry={onRetry} />
       <FailureNote failures={failures} />
-      {status === "ready" && albums.length === 0 ? (
-        <div className="empty">
-          <p>{searching ? "No albums match that search." : "No photos yet. Add a local folder or an SFTP directory."}</p>
-          {searching ? null : (
-            <button type="button" className="btn primary" onClick={onAdd}>
-              Add source
-            </button>
-          )}
-        </div>
-      ) : null}
-      {status === "ready" && albums.length > 0 ? (
-        <ul className="album-grid">
-          {albums.map((item) => (
-            <AlbumCard
-              key={`${item.sourceId}:${item.path}`}
-              album={item}
+      {status === "ready"
+        ? visibleSources.map((source) => (
+            <SourceBlock
+              key={source.id}
+              source={source}
+              albums={albums}
+              folderStatus={folderStatus}
+              failures={failures}
               from="library"
               fit={fit}
               blur={blur}
             />
-          ))}
-        </ul>
+          ))
+        : null}
+      {status === "ready" && sources.length === 0 && !searching ? (
+        <div className="empty">
+          <p>No photos yet. Add a local folder or an SFTP directory.</p>
+          <button type="button" className="btn primary" onClick={onAdd}>
+            Add source
+          </button>
+        </div>
       ) : null}
+      {status === "ready" && searching && visibleSources.length === 0 ? <p className="empty">No albums match that search.</p> : null}
     </>
   );
 }
@@ -303,6 +342,7 @@ function Albums({
   sources,
   albums,
   status,
+  folderStatus,
   error,
   failures,
   searching,
@@ -315,8 +355,9 @@ function Albums({
   sources: Source[];
   albums: Album[];
   status: "loading" | "ready" | "error";
+  folderStatus: FolderPhase;
   error: string | null;
-  failures: string[];
+  failures: FolderFailure[];
   searching: boolean;
   fit: "cover" | "contain";
   blur: boolean;
@@ -324,9 +365,9 @@ function Albums({
   onAdd: () => void;
   onRemove: (source: Source) => void;
 }) {
-  const groups = sources
-    .map((source) => ({ source, albums: albums.filter((item) => item.sourceId === source.id) }))
-    .filter((group) => (searching ? group.albums.length > 0 : true));
+  const visibleSources = sources.filter((source) =>
+    searching ? albums.some((item) => item.sourceId === source.id) : true,
+  );
 
   return (
     <>
@@ -346,44 +387,73 @@ function Albums({
           <p>No sources yet. Add a local folder or an SFTP directory.</p>
         </div>
       ) : null}
-      {status === "ready" && searching && groups.length === 0 ? <p className="empty">No albums match that search.</p> : null}
+      {status === "ready" && searching && visibleSources.length === 0 ? <p className="empty">No albums match that search.</p> : null}
       {status === "ready"
-        ? groups.map((group) => (
-            <section key={group.source.id} className="source-group" aria-labelledby={`source-${group.source.id}`}>
-              <div className="source-group-head">
-                <div>
-                  <h2 id={`source-${group.source.id}`}>{group.source.label}</h2>
-                  <p className="page-count" translate="no">
-                    {sourceMeta(group.source)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn"
-                  aria-label={`Remove source ${group.source.label}`}
-                  onClick={() => onRemove(group.source)}
-                >
-                  Remove
-                </button>
-              </div>
-              {group.albums.length === 0 ? <p className="empty">No photos in this source yet.</p> : null}
-              {group.albums.length > 0 ? (
-                <ul className="album-grid">
-                  {group.albums.map((item) => (
-                    <AlbumCard
-                      key={`${item.sourceId}:${item.path}`}
-                      album={item}
-                      from="albums"
-                      fit={fit}
-                      blur={blur}
-                    />
-                  ))}
-                </ul>
-              ) : null}
-            </section>
+        ? visibleSources.map((source) => (
+            <SourceBlock
+              key={source.id}
+              source={source}
+              albums={albums}
+              folderStatus={folderStatus}
+              failures={failures}
+              from="albums"
+              fit={fit}
+              blur={blur}
+              onRemove={() => onRemove(source)}
+            />
           ))
         : null}
     </>
+  );
+}
+
+function SourceBlock({
+  source,
+  albums,
+  folderStatus,
+  failures,
+  from,
+  fit,
+  blur,
+  onRemove,
+}: {
+  source: Source;
+  albums: Album[];
+  folderStatus: FolderPhase;
+  failures: FolderFailure[];
+  from: GallerySection;
+  fit: "cover" | "contain";
+  blur: boolean;
+  onRemove?: () => void;
+}) {
+  const ownAlbums = albums.filter((item) => item.sourceId === source.id);
+  const connection = sourceConnectionText(source.id, folderStatus, failures, ownAlbums.length);
+  return (
+    <section className="source-group" aria-labelledby={`source-${from}-${source.id}`}>
+      <div className="source-group-head">
+        <div>
+          <h2 id={`source-${from}-${source.id}`}>{source.label}</h2>
+          <p className="page-count" translate="no">
+            {sourceMeta(source)}
+          </p>
+        </div>
+        {onRemove ? (
+          <button type="button" className="btn" aria-label={`Remove source ${source.label}`} onClick={onRemove}>
+            Remove
+          </button>
+        ) : null}
+      </div>
+      <p className="status-line" role={connection.role}>
+        {connection.text}
+      </p>
+      {ownAlbums.length > 0 ? (
+        <ul className="album-grid">
+          {ownAlbums.map((item) => (
+            <AlbumCard key={`${item.sourceId}:${item.path}`} album={item} from={from} fit={fit} blur={blur} />
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
@@ -517,11 +587,11 @@ function Status({
   return null;
 }
 
-function FailureNote({ failures }: { failures: string[] }) {
+function FailureNote({ failures }: { failures: FolderFailure[] }) {
   if (failures.length === 0) return null;
   return (
-    <p className="status-line" role="status">
-      Some folders could not be loaded: {failures.join(", ")}.
+    <p className="status-line" role="alert">
+      Some folders could not be loaded: {failures.map((failure) => failure.message).join(", ")}.
     </p>
   );
 }
