@@ -1,6 +1,8 @@
 # FRONT API expectations
 
-The live contract is [INTEGRATION_CONTRACT_v1.md](../INTEGRATION_CONTRACT_v1.md), implemented in `app/main.py` (baseline `6109125`). The client calls only those routes, on the same origin as the SPA. It does not invent endpoints and it does not proxy ComfyUI.
+The live contract is [INTEGRATION_CONTRACT_v1.md](../INTEGRATION_CONTRACT_v1.md), implemented in `app/main.py`. The client calls only those routes, on the same origin as the SPA. It does not invent endpoints and it does not proxy ComfyUI.
+
+`GET /` and other non-`/api` GETs serve the built SPA (`client/dist` in the image at `/app/spa`), with `index.html` when the path has no file extension. That is static hosting, not an API route.
 
 CSRF is double-submit, as in `csrf_guard`: `X-CSRF-Token` must equal the `seraframe_csrf` cookie. `GET /api/auth/csrf` returns `{ "csrfToken" }` and sets that cookie to the same value. Thumbnail responses from this baseline are `image/webp`. The client still treats thumb and full responses as opaque image bytes at the URLs in each `Still`.
 

@@ -664,7 +664,8 @@ code {
   background: #fff;
 }
 
-.frame-loading {
+.frame-loading,
+.frame-note {
   position: absolute;
   z-index: 1;
   margin: 0.75rem;
@@ -672,6 +673,7 @@ code {
   background: #f4efe6;
   padding: 0.35rem 0.6rem;
   border-radius: 8px;
+  max-width: min(36rem, calc(100% - 1.5rem));
 }
 
 .frame-fallback {

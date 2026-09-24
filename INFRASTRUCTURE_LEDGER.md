@@ -7,6 +7,7 @@ SeraFrame backend, contract v1. This file records how the service is built and w
 - Image base: `debian:bookworm-slim`
 - Python: 3.12.14, built from the upstream CPython tarball into `/usr/local`, then a virtualenv at `/opt/venv`. Bookworm's archive only ships Python 3.11.
 - Process: `uvicorn app.main:create_app --factory --host 0.0.0.0 --port $SERAFRAME_PORT`
+- UI: the image builds `client/dist` and copies it to `/app/spa`. `GET /` serves that login UI. `/api/*` is unchanged.
 - User: `seraframe` (uid/gid 10001). The image sets `USER seraframe`. If the entrypoint is started as root, it chowns `SERAFRAME_DATA_DIR` and `exec`s `runuser` so the server is still non-root.
 - Listen: `0.0.0.0:8080` (`SERAFRAME_PORT`)
 - Compose service: `seraframe`, host port `8080`, restart `unless-stopped`
