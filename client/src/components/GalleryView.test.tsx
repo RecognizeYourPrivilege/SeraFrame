@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 import { resetClientForTests } from "../api/client";
 import type { Source } from "../api/types";
+import { PrefsProvider } from "../lib/prefs";
 import { GalleryView } from "./GalleryView";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -87,7 +88,9 @@ describe("GalleryView SFTP source create", () => {
     root = createRoot(host);
     await act(async () => {
       root?.render(
-        <GalleryView section="library" album={null} query="" showFullPhoto blurThumbs={false} chromeHidden={false} />,
+        <PrefsProvider>
+          <GalleryView section="library" album={null} query="" showFullPhoto blurThumbs={false} chromeHidden={false} />
+        </PrefsProvider>,
       );
     });
     await flush();

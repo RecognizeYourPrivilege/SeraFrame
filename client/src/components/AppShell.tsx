@@ -1,27 +1,34 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { requestAddSource } from "../lib/addSourceRequest";
 import { useChromeVisibility } from "../lib/chrome";
-import { useMediaQuery } from "../lib/hooks";
+import { PHONE_QUERY, useMediaQuery } from "../lib/hooks";
+import { usePrefs, type MobileLayout } from "../lib/prefs";
 import { useRoute, routeSection, SECTION_LABEL, sectionHash, serverHash, type GallerySection } from "../lib/route";
 import { useServers } from "../lib/useServers";
 import { GalleryView } from "./GalleryView";
+import { HamburgerIcon, MobileTabBar, OverflowMenu } from "./MobileChrome";
 import { ProfileButton } from "./ProfileButton";
 import { ProfileMenu } from "./ProfileMenu";
 import { ServerFrame } from "./ServerFrame";
 import { ServersRail } from "./ServersRail";
-import { usePrefs } from "../lib/prefs";
 
 export function AppShell() {
   const route = useRoute();
   const { prefs } = usePrefs();
   const desktop = useMediaQuery("(min-width: 840px)");
+  const mobile = useMediaQuery(PHONE_QUERY);
   const catalog = useServers();
   const immersive = route.kind === "server";
   const chrome = useChromeVisibility(prefs.serversAutoHide, immersive);
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
+  const [overflowOpen, setOverflowOpen] = useState(false);
   const [connectedIds, setConnectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const profileRef = useRef<HTMLButtonElement>(null);
+  const overflowToggleRef = useRef<HTMLButtonElement>(null);
+  const layout: MobileLayout = mobile ? prefs.mobileLayout : 1;
+  const phoneTabs = mobile && layout !== 2;
 
   const section = routeSection(route);
   const showChrome = !chrome.hidden;
@@ -55,6 +62,26 @@ export function AppShell() {
     }
     document.title = `${SECTION_LABEL[route.section]} — SeraFrame`;
   }, [route, catalog.servers]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!mobile) {
+      delete root.dataset.mobileLayout;
+      return;
+    }
+    root.dataset.mobileLayout = String(prefs.mobileLayout);
+    return () => {
+      delete root.dataset.mobileLayout;
+    };
+  }, [mobile, prefs.mobileLayout]);
+
+  useEffect(() => {
+    setOverflowOpen(false);
+  }, [route]);
+
+  useEffect(() => {
+    if (!mobile || prefs.mobileLayout !== 2) setOverflowOpen(false);
+  }, [mobile, prefs.mobileLayout]);
 
   useEffect(() => {
     if (!railOpen || desktop) return;
@@ -94,24 +121,58 @@ export function AppShell() {
 
   const selectedServer = route.kind === "server" ? catalog.servers.find((server) => server.id === route.serverId) ?? null : null;
 
+  const shellClass = [
+    showChrome ? "shell" : "shell is-immersive",
+    mobile ? "is-phone" : "",
+    mobile ? `is-layout-${layout}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  function openOverflowServers() {
+    setOverflowOpen(false);
+    setRailOpen(true);
+  }
+
+  function openAddSource() {
+    setOverflowOpen(false);
+    if (route.kind === "server") window.location.hash = "#/library";
+    requestAddSource();
+  }
+
   return (
     <>
-      <div className={showChrome ? "shell" : "shell is-immersive"}>
+      <div className={shellClass}>
         <a className="skip" href="#main">
           Skip to content
         </a>
         {showChrome ? (
           <TopBar
             section={section}
+            title={route.kind === "server" ? selectedServer?.name || "Server" : SECTION_LABEL[route.section]}
             query={query}
             desktop={desktop}
+            mobile={mobile}
+            layout={layout}
             railOpen={railOpen}
             menuOpen={menuOpen}
+            overflowOpen={overflowOpen}
             connected={connected}
             profileRef={profileRef}
+            overflowToggleRef={overflowToggleRef}
             onQuery={setQuery}
             onToggleRail={() => setRailOpen((open) => !open)}
-            onProfile={() => setMenuOpen((open) => !open)}
+            onProfile={() => {
+              setOverflowOpen(false);
+              setMenuOpen((open) => !open);
+            }}
+            onToggleOverflow={() => {
+              setMenuOpen(false);
+              setOverflowOpen((open) => !open);
+            }}
+            onCloseOverflow={() => setOverflowOpen(false)}
+            onOverflowServers={openOverflowServers}
+            onAddSource={openAddSource}
           />
         ) : null}
         <div className="shell-body">
@@ -169,6 +230,9 @@ export function AppShell() {
           />
         )}
         </div>
+        {showChrome && phoneTabs ? (
+          <MobileTabBar section={section} railOpen={railOpen} onToggleRail={() => setRailOpen((open) => !open)} />
+        ) : null}
       </div>
       {showChrome && railOpen && !desktop ? (
         <button type="button" className="sidebar-backdrop" aria-label="Close servers" onClick={() => setRailOpen(false)} />
@@ -205,30 +269,70 @@ export function AppShell() {
 
 function TopBar({
   section,
+  title,
   query,
   desktop,
+  mobile,
+  layout,
   railOpen,
   menuOpen,
+  overflowOpen,
   connected,
   profileRef,
+  overflowToggleRef,
   onQuery,
   onToggleRail,
   onProfile,
+  onToggleOverflow,
+  onCloseOverflow,
+  onOverflowServers,
+  onAddSource,
 }: {
   section: GallerySection | null;
+  title: string;
   query: string;
   desktop: boolean;
+  mobile: boolean;
+  layout: MobileLayout;
   railOpen: boolean;
   menuOpen: boolean;
+  overflowOpen: boolean;
   connected: boolean;
   profileRef: RefObject<HTMLButtonElement | null>;
+  overflowToggleRef: RefObject<HTMLButtonElement | null>;
   onQuery: (value: string) => void;
   onToggleRail: () => void;
   onProfile: () => void;
+  onToggleOverflow: () => void;
+  onCloseOverflow: () => void;
+  onOverflowServers: () => void;
+  onAddSource: () => void;
 }) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const showSearchField = !mobile || searchOpen || query.length > 0;
+  const showHamburger = mobile && layout === 2;
+
+  useEffect(() => {
+    if (showSearchField && mobile) searchRef.current?.focus();
+  }, [showSearchField, mobile]);
+
   return (
     <header className="topbar">
-      {!desktop ? (
+      {showHamburger ? (
+        <button
+          ref={overflowToggleRef}
+          type="button"
+          className="icon-btn nav-toggle"
+          aria-expanded={overflowOpen}
+          aria-controls="mobile-overflow"
+          aria-label={overflowOpen ? "Close menu" : "Open menu"}
+          onClick={onToggleOverflow}
+        >
+          <HamburgerIcon />
+        </button>
+      ) : null}
+      {!mobile && !desktop ? (
         <button
           type="button"
           className="btn"
@@ -239,38 +343,63 @@ function TopBar({
           Servers
         </button>
       ) : null}
-      <nav className="segments" aria-label="Gallery">
-        {(["library", "foryou", "albums"] as const).map((item) => (
-          <a key={item} href={sectionHash(item)} aria-current={section === item ? "page" : undefined}>
-            {SECTION_LABEL[item]}
-          </a>
-        ))}
-      </nav>
-      <label className="search">
-        <span className="visually-hidden">Search</span>
-        <SearchIcon />
-        <input
-          type="search"
-          placeholder="Search"
-          value={query}
-          autoComplete="off"
-          enterKeyHint="search"
-          onChange={(event) => onQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && query) {
-              event.preventDefault();
-              event.stopPropagation();
-              onQuery("");
-            }
-          }}
-        />
-        {query ? (
-          <button type="button" className="search-clear" aria-label="Clear search" onClick={() => onQuery("")}>
-            ×
+      {!mobile ? (
+        <nav className="segments" aria-label="Gallery">
+          {(["library", "foryou", "albums"] as const).map((item) => (
+            <a key={item} href={sectionHash(item)} aria-current={section === item ? "page" : undefined}>
+              {SECTION_LABEL[item]}
+            </a>
+          ))}
+        </nav>
+      ) : null}
+      {showHamburger && !showSearchField ? <p className="topbar-title">{title}</p> : null}
+      <div className={mobile ? "topbar-end" : "topbar-end is-desktop"}>
+        {showSearchField ? (
+          <label className="search">
+            <span className="visually-hidden">Search</span>
+            <SearchIcon />
+            <input
+              ref={searchRef}
+              type="search"
+              placeholder="Search"
+              value={query}
+              autoComplete="off"
+              enterKeyHint="search"
+              onChange={(event) => onQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (query) onQuery("");
+                  if (mobile) setSearchOpen(false);
+                }
+              }}
+              onBlur={() => {
+                if (mobile && !query) setSearchOpen(false);
+              }}
+            />
+            {query ? (
+              <button type="button" className="search-clear" aria-label="Clear search" onClick={() => onQuery("")}>
+                ×
+              </button>
+            ) : null}
+          </label>
+        ) : (
+          <button type="button" className="icon-btn search-toggle" aria-label="Search" onClick={() => setSearchOpen(true)}>
+            <SearchIcon />
           </button>
-        ) : null}
-      </label>
-      <ProfileButton connected={connected} pressed={menuOpen} buttonRef={profileRef} onClick={onProfile} />
+        )}
+        <ProfileButton connected={connected} pressed={menuOpen} buttonRef={profileRef} onClick={onProfile} />
+      </div>
+      {overflowOpen && showHamburger ? (
+        <OverflowMenu
+          section={section}
+          toggleRef={overflowToggleRef}
+          onClose={onCloseOverflow}
+          onServers={onOverflowServers}
+          onAddSource={onAddSource}
+        />
+      ) : null}
     </header>
   );
 }
