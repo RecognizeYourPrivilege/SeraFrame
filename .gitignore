@@ -8,3 +8,12 @@ data/
 *.sqlite
 *.sqlite-*
 .env
+
+node_modules/
+dist/
+.DS_Store
+.vite/
+*.local
+.env.local
+.env.*.local
+coverage/

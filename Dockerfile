@@ -1,3 +1,13 @@
+FROM node:22-bookworm-slim AS spa
+
+WORKDIR /src/client
+
+COPY client/package.json client/package-lock.json ./
+RUN npm ci
+
+COPY client/ ./
+RUN npm run build
+
 FROM debian:bookworm-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -6,7 +16,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LC_ALL=C.UTF-8 \
     PATH="/opt/venv/bin:$PATH" \
     SERAFRAME_DATA_DIR=/data \
-    SERAFRAME_PORT=8080
+    SERAFRAME_PORT=8080 \
+    SERAFRAME_SPA_DIR=/app/spa
 
 # Bookworm ships Python 3.11. Build CPython 3.12 from the upstream tarball.
 ARG PYTHON_VERSION=3.12.14
@@ -49,13 +60,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY --from=spa /src/client/dist ./spa
 COPY docker/entrypoint.sh /usr/local/bin/seraframe-entrypoint
 
 RUN chmod 755 /usr/local/bin/seraframe-entrypoint \
     && groupadd --gid 10001 seraframe \
     && useradd --uid 10001 --gid 10001 --home-dir /home/seraframe --create-home --shell /usr/sbin/nologin seraframe \
     && mkdir -p /data \
-    && chown -R seraframe:seraframe /data /home/seraframe
+    && chown -R seraframe:seraframe /data /home/seraframe /app/spa
 
 USER seraframe
 
