@@ -7,14 +7,18 @@ type LightboxProps = {
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
+  fit?: "cover" | "contain";
+  blurThumbs?: boolean;
 };
 
-export function Lightbox({ stills, index, onIndex, onClose }: LightboxProps) {
+export function Lightbox({ stills, index, onIndex, onClose, fit = "contain", blurThumbs = false }: LightboxProps) {
   const still = stills[index];
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLUListElement>(null);
   const [stripOpen, setStripOpen] = useState(false);
+  const stripOpenRef = useRef(false);
+  stripOpenRef.current = stripOpen;
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -61,11 +65,11 @@ export function Lightbox({ stills, index, onIndex, onClose }: LightboxProps) {
         setStripOpen(true);
       } else if (event.key === "Escape") {
         event.preventDefault();
-        setStripOpen((open) => {
-          if (open) return false;
-          onCloseRef.current();
-          return false;
-        });
+        if (stripOpenRef.current) {
+          setStripOpen(false);
+          return;
+        }
+        onCloseRef.current();
       } else if (event.key === "Tab") {
         trapTab(event, panelRef.current);
       }
@@ -106,7 +110,7 @@ export function Lightbox({ stills, index, onIndex, onClose }: LightboxProps) {
   return createPortal(
     <div
       ref={panelRef}
-      className="lightbox"
+      className={fit === "contain" ? "lightbox is-contain" : "lightbox is-cover"}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -119,7 +123,9 @@ export function Lightbox({ stills, index, onIndex, onClose }: LightboxProps) {
         </button>
       </div>
       <div className="lightbox-stage" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        {!loaded && !failed ? <img className="placeholder" src={still.thumbUrl} alt="" /> : null}
+        {!loaded && !failed ? (
+          <img className={blurThumbs ? "placeholder is-blurred" : "placeholder"} src={still.thumbUrl} alt="" />
+        ) : null}
         {failed ? (
           <p className="frame-fallback" role="alert">
             Full image failed to load.
@@ -153,7 +159,15 @@ export function Lightbox({ stills, index, onIndex, onClose }: LightboxProps) {
                 aria-label={`Show ${item.name}`}
                 onClick={() => onIndex(itemIndex)}
               >
-                <img src={item.thumbUrl} alt="" width={72} height={72} loading="lazy" decoding="async" />
+                <img
+                  className={blurThumbs ? "is-blurred" : undefined}
+                  src={item.thumbUrl}
+                  alt=""
+                  width={72}
+                  height={72}
+                  loading="lazy"
+                  decoding="async"
+                />
               </button>
             </li>
           ))}

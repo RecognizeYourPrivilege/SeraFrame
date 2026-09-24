@@ -4,9 +4,11 @@ import type { Still } from "../api/types";
 type ThumbGridProps = {
   stills: Still[];
   onOpen: (index: number) => void;
+  fit?: "cover" | "contain";
+  blur?: boolean;
 };
 
-export function ThumbGrid({ stills, onOpen }: ThumbGridProps) {
+export function ThumbGrid({ stills, onOpen, fit = "cover", blur = false }: ThumbGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   const [active, setActive] = useState(0);
@@ -51,6 +53,8 @@ export function ThumbGrid({ stills, onOpen }: ThumbGridProps) {
         <div role="listitem" key={`${still.sourceId}:${still.relPath}`}>
           <ThumbButton
             still={still}
+            fit={fit}
+            blur={blur}
             tabIndex={index === active ? 0 : -1}
             buttonRef={(node) => {
               buttons.current[index] = node;
@@ -65,11 +69,15 @@ export function ThumbGrid({ stills, onOpen }: ThumbGridProps) {
 
 function ThumbButton({
   still,
+  fit,
+  blur,
   tabIndex,
   buttonRef,
   onOpen,
 }: {
   still: Still;
+  fit: "cover" | "contain";
+  blur: boolean;
   tabIndex: number;
   buttonRef: (node: HTMLButtonElement | null) => void;
   onOpen: () => void;
@@ -79,7 +87,7 @@ function ThumbButton({
   return (
     <button
       type="button"
-      className="thumb"
+      className={fit === "contain" ? "thumb is-contain" : "thumb"}
       tabIndex={tabIndex}
       ref={buttonRef}
       aria-label={`Open ${still.name}`}
@@ -89,6 +97,7 @@ function ThumbButton({
         <span className="thumb-fallback">{still.name}</span>
       ) : (
         <img
+          className={blur ? "is-blurred" : undefined}
           src={still.thumbUrl}
           alt=""
           width={256}
