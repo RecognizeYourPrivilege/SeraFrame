@@ -14,9 +14,9 @@ def _prepare(monkeypatch, data_dir):
     monkeypatch.delenv("SERAFRAME_PORT", raising=False)
 
 
-def test_default_port_is_8081(tmp_path, monkeypatch):
+def test_default_port_is_18880(tmp_path, monkeypatch):
     _prepare(monkeypatch, tmp_path)
-    assert load_settings().port == 8081
+    assert load_settings().port == 18880
 
 
 def test_port_env_override(tmp_path, monkeypatch):
@@ -53,8 +53,8 @@ def _entrypoint_port(tmp_path, port_env):
     return args[args.index("--port") + 1]
 
 
-def test_entrypoint_default_port_is_8081(tmp_path):
-    assert _entrypoint_port(tmp_path, None) == "8081"
+def test_entrypoint_default_port_is_18880(tmp_path):
+    assert _entrypoint_port(tmp_path, None) == "18880"
 
 
 def test_entrypoint_port_override_binds_requested_port(tmp_path):
