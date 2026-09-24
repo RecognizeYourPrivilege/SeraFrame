@@ -7,14 +7,15 @@ FRONT lives in `client/`. `npm run build` writes `client/dist`. The Docker image
 | File | Path | Role | Depends on |
 | --- | --- | --- | --- |
 | `main.tsx` | `client/src/main.tsx` | Starts MSW in dev, mounts the tree | `browser.ts`, `App.tsx`, `global.css` |
-| `App.tsx` | `client/src/App.tsx` | Splash, login, or shell from session status | `AuthProvider.tsx` |
+| `App.tsx` | `client/src/App.tsx` | Splash, login, first-run Appearance, or shell | `AuthProvider.tsx`, `AppearancePicker.tsx` |
+| `AppearancePicker.tsx` | `client/src/components/AppearancePicker.tsx` | One-time light (Photos) / dark (Neon) picker after the first password | `prefs.tsx` |
 | `AuthProvider.tsx` | `client/src/auth/AuthProvider.tsx` | `GET /api/auth/me`, login, logout; `401` returns to login | `client.ts` |
 | `LoginScreen.tsx` | `client/src/components/LoginScreen.tsx` | Password form, lockout message, demo hint | `AuthProvider.tsx` |
 | `AppShell.tsx` | `client/src/components/AppShell.tsx` | Library / For You / Albums, search, profile, idle chrome, Servers rail | `GalleryView.tsx`, `ServersRail.tsx`, `ProfileMenu.tsx`, `ServerFrame.tsx` |
 | `ProfileMenu.tsx` | `client/src/components/ProfileMenu.tsx` | Appearance, features, password note, session, About, sign out | `prefs.tsx`, `AuthProvider.tsx` |
 | `ProfileButton.tsx` | `client/src/components/ProfileButton.tsx` | Locked ring icon. Top bar chip and floating button. Green badge when a server frame is ready | — |
 | `ServersRail.tsx` | `client/src/components/ServersRail.tsx` | Server list. Fully removed with the top bar after idle. Not a peek rail | `AddServerDialog.tsx` |
-| `prefs.tsx` | `client/src/lib/prefs.tsx` | Light/dark, auto-hide, full photo, blur. `localStorage` key `seraframe.prefs` | — |
+| `prefs.tsx` | `client/src/lib/prefs.tsx` | Light/dark, auto-hide, full photo, blur, `firstRunAppearanceDone`. `localStorage` key `seraframe.prefs` | — |
 | `Dialog.tsx` | `client/src/components/Dialog.tsx` | Modal, focus trap, Escape, portaled so the page can be `inert` | — |
 
 ## Gallery
