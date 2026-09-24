@@ -16,7 +16,7 @@ Image identity is never a bare filename. Listings and media URLs always carry `s
 
 Codes the client surfaces as text: `unauthorized`, `forbidden`, `not_found`, `validation`, `locked_out`, `csrf`, `path_rejected`, `io_error`, `conflict`.
 
-`401` on any call drops the UI back to login. `429` with `Retry-After` (delta seconds) is shown on the login form for `locked_out`. A mutating call that fails with `csrf` is retried once after a fresh `GET /api/auth/csrf`.
+`401` on any call drops the UI back to login, except `POST /api/auth/change-password` when the message is `current password is incorrect`. That response keeps this session and the form shows the message. `429` with `Retry-After` (delta seconds) is shown on the login form for `locked_out`. A mutating call that fails with `csrf` is retried once after a fresh `GET /api/auth/csrf`.
 
 ## Auth
 
@@ -28,10 +28,37 @@ CSRF: header `X-CSRF-Token` on `POST`, `PUT`, `PATCH`, and `DELETE`. The value i
 | --- | --- | --- | --- |
 | GET | `/api/auth/csrf` | — | `{ "csrfToken": string }` and the csrf cookie |
 | POST | `/api/auth/login` | `{ "password": string }` + CSRF | `{ "ok": true }` and the session cookie. `401` wrong password. `429` locked, `Retry-After` seconds |
-| POST | `/api/auth/logout` | CSRF | `{ "ok": true }` clears the session |
-| GET | `/api/auth/me` | — | `{ "authenticated": true }` or `401` |
+| POST | `/api/auth/logout` | CSRF | `{ "ok": true }` clears this session. Use this to revoke the current session |
+| GET | `/api/auth/me` | — | `{ "authenticated": true }` or `401`. No prefs on this body |
+| POST | `/api/auth/change-password` | `{ "currentPassword": string, "newPassword": string }` + CSRF | `{ "ok": true }`. Wrong current password is `401` `unauthorized`. Success keeps this cookie and revokes every other session |
+| GET | `/api/auth/sessions` | — | `{ "sessions": Session[] }` |
+| DELETE | `/api/auth/sessions/{id}` | CSRF | `{ "ok": true }`. The current session id is `400` `validation` |
 
-Unauthenticated `/api/sources*`, `/api/servers*`, and `/api/media*` return **401**. The grid and the servers list are not shown until `me` succeeds.
+```ts
+type Session = {
+  id: string;
+  createdAt: string;
+  lastSeenAt: string;
+  userAgent: string | null;
+  ip: string | null;
+  current: boolean;
+};
+```
+
+`id` is not the `seraframe_session` token. The list is oldest first. `current: true` is the cookie this browser is using.
+
+Unauthenticated `/api/sources*`, `/api/servers*`, `/api/media*`, `/api/prefs`, change-password, and session list/revoke return **401** when CSRF is satisfied (mutations without CSRF are still `403` `csrf`). The grid and the servers list are not shown until `me` succeeds.
+
+## Prefs
+
+Draft 2.1.4. One admin. The server stores Appearance and whether the first-run picker is done. Feature toggles stay in the browser. Do not POST them here and do not copy `localStorage` onto the server.
+
+| Method | Path | Body | Success |
+| --- | --- | --- | --- |
+| GET | `/api/prefs` | — | `{ "appearance": "light" \| "dark" \| null, "firstRunAppearanceDone": boolean }` |
+| PUT | `/api/prefs` | `{ "appearance"?: "light" \| "dark", "firstRunAppearanceDone"?: true }` + CSRF | the stored object, same shape as GET |
+
+After login, GET prefs. If `firstRunAppearanceDone` is false, show the picker once, then PUT `{ "appearance": "light" | "dark", "firstRunAppearanceDone": true }`. A later Appearance change PUTs `{ "appearance" }` only. `null` appearance means unset. The flag does not go back to false.
 
 ## Sources
 

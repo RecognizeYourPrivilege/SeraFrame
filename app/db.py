@@ -1,10 +1,15 @@
-"""SQLite storage for the single admin, sessions, sources, and servers."""
+"""SQLite storage for the single admin, sessions, sources, and servers.
+
+Existing volumes are migrated in place. New columns and the session id index are
+added without deleting admin, session, source, server, or host-key rows.
+"""
 
 from __future__ import annotations
 
 import sqlite3
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -14,13 +19,19 @@ CREATE TABLE IF NOT EXISTS admin (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     password_hash TEXT NOT NULL,
     failed_attempts INTEGER NOT NULL DEFAULT 0,
-    locked_until REAL
+    locked_until REAL,
+    appearance TEXT CHECK (appearance IN ('light', 'dark')),
+    first_run_appearance_done INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
+    id TEXT NOT NULL,
     created_at REAL NOT NULL,
-    expires_at REAL NOT NULL
+    last_seen_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    user_agent TEXT,
+    ip TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -53,6 +64,12 @@ CREATE TABLE IF NOT EXISTS host_keys (
 """
 
 
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    if table not in {"admin", "sessions"}:
+        raise RuntimeError(f"unexpected table {table}")
+    return {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
 class Database:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,6 +82,55 @@ class Database:
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.execute("PRAGMA busy_timeout=5000")
             self._conn.executescript(_SCHEMA)
+            self._migrate(self._conn)
+
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        """Add Draft 2.1.4 columns on databases created before them."""
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            admin_cols = _column_names(conn, "admin")
+            if "appearance" not in admin_cols:
+                conn.execute("ALTER TABLE admin ADD COLUMN appearance TEXT")
+            if "first_run_appearance_done" not in admin_cols:
+                conn.execute(
+                    """
+                    ALTER TABLE admin
+                    ADD COLUMN first_run_appearance_done INTEGER NOT NULL DEFAULT 0
+                    """
+                )
+
+            session_cols = _column_names(conn, "sessions")
+            if "id" not in session_cols:
+                conn.execute("ALTER TABLE sessions ADD COLUMN id TEXT")
+            if "last_seen_at" not in session_cols:
+                conn.execute("ALTER TABLE sessions ADD COLUMN last_seen_at REAL")
+            if "user_agent" not in session_cols:
+                conn.execute("ALTER TABLE sessions ADD COLUMN user_agent TEXT")
+            if "ip" not in session_cols:
+                conn.execute("ALTER TABLE sessions ADD COLUMN ip TEXT")
+            conn.execute(
+                """
+                UPDATE sessions
+                SET last_seen_at = created_at
+                WHERE last_seen_at IS NULL
+                """
+            )
+            missing_ids = conn.execute(
+                "SELECT token FROM sessions WHERE id IS NULL OR id = ''"
+            ).fetchall()
+            for row in missing_ids:
+                conn.execute(
+                    "UPDATE sessions SET id = ? WHERE token = ?",
+                    (str(uuid.uuid4()), row["token"]),
+                )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS sessions_id_unique ON sessions(id)"
+            )
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        else:
+            conn.execute("COMMIT")
 
     def close(self) -> None:
         with self._lock:

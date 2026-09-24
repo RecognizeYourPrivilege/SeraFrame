@@ -40,7 +40,7 @@ Compose volume `seraframe-data` mounted at `/data` (`SERAFRAME_DATA_DIR`).
 
 | Path | Contents |
 | --- | --- |
-| `/data/seraframe.sqlite` | Admin hash, sessions, sources, servers, SFTP host-key fingerprints |
+| `/data/seraframe.sqlite` | Admin hash, appearance prefs, sessions, sources, servers, SFTP host-key fingerprints |
 | `/data/secret_key` | Persisted Fernet key material when `SERAFRAME_SECRET_KEY` is unset or empty. Mode `0600`. Not created or overwritten when the variable is set. |
 | `/data/thumbs/{source_id}/{hash}-{version}.webp` | Thumbnail cache |
 
@@ -56,9 +56,12 @@ Images larger than 64 MiB are refused.
 
 ## Secrets and auth
 
-- One admin. `SERAFRAME_ADMIN_PASSWORD` is Argon2-hashed on first boot when the admin row is absent.
-- Five failed logins lock the account for 15 minutes. Further attempts get HTTP 429 and `Retry-After`.
-- Session cookie `seraframe_session`: HttpOnly, SameSite=Lax, 7 days. `Secure` when `SERAFRAME_TRUST_PROXY=1`.
+- One admin. `SERAFRAME_ADMIN_PASSWORD` is Argon2-hashed on first boot when the admin row is absent. After that row exists, `POST /api/auth/change-password` replaces the stored hash and does not rewrite the environment variable. A later start does not copy the environment password over the hash.
+- The admin row also stores Appearance: `appearance` (`light`, `dark`, or NULL) and `first_run_appearance_done` (0/1, default 0). Feature toggles are not stored. Nothing is imported from browser `localStorage`.
+- Five failed logins lock the account for 15 minutes. Further login attempts get HTTP 429 and `Retry-After`. A wrong current password on change-password is 401 and does not increment that counter.
+- Session cookie `seraframe_session`: HttpOnly, SameSite=Lax, 7 days. `Secure` when `SERAFRAME_TRUST_PROXY=1`. The cookie value is the session `token`. `GET /api/auth/sessions` returns a separate opaque `id`, plus `created_at`, `last_seen_at`, `user_agent`, and `ip`. User-Agent and IP are captured at login and are not overwritten once set. A migrated row with a null user agent or IP gets that field filled on the next authenticated request. IP uses `X-Forwarded-For` only when `SERAFRAME_TRUST_PROXY=1`; otherwise the socket peer is stored. `last_seen_at` updates on authenticated requests. An expired row is deleted when it is next used.
+- Change-password deletes every session row except the caller's. `DELETE /api/auth/sessions/{id}` deletes one other session. Deleting the current id is rejected; `POST /api/auth/logout` deletes the current row.
+- Startup migrates an existing `seraframe.sqlite` in place. Missing `admin.appearance`, `admin.first_run_appearance_done`, and session columns `id`, `last_seen_at`, `user_agent`, and `ip` are added. Existing session tokens stay valid; each row without an `id` gets a new opaque id, and `last_seen_at` is copied from `created_at` when it was null. Admin hash, sources, servers, and host keys are left in place. A unique index `sessions_id_unique` is created on `sessions.id`.
 - CSRF: `GET /api/auth/csrf` returns `csrfToken` and sets non-HttpOnly cookie `seraframe_csrf`. `POST`, `PUT`, `PATCH`, and `DELETE` under `/api/` must send `X-CSRF-Token` equal to that cookie.
 - `SERAFRAME_ADMIN_PASSWORD` has no default. A missing or empty value stops startup before any secret file is written.
 - `SERAFRAME_SECRET_KEY`, when set and at least 32 bytes, is the key material for that process. The file `/data/secret_key` is left untouched (not read, not created, not replaced).

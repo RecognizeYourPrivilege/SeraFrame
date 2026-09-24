@@ -111,6 +111,84 @@ describe("api client", () => {
     } satisfies Partial<ApiError>);
   });
 
+  it("changes the password with the current and new values and a CSRF header", async () => {
+    document.cookie = "seraframe_csrf=from-cookie; Path=/";
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    await api.changePassword({ currentPassword: "old", newPassword: "new-secret" });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/change-password");
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(JSON.stringify({ currentPassword: "old", newPassword: "new-secret" }));
+    expect(new Headers(init?.headers).get("X-CSRF-Token")).toBe("from-cookie");
+  });
+
+  it("keeps the session when change-password rejects the current password", async () => {
+    document.cookie = "seraframe_csrf=from-cookie; Path=/";
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: { code: "unauthorized", message: "current password is incorrect" } }, 401),
+    );
+
+    await expect(api.changePassword({ currentPassword: "nope", newPassword: "next" })).rejects.toMatchObject({
+      status: 401,
+      code: "unauthorized",
+      message: "current password is incorrect",
+    });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it("signs out when change-password reports the session is gone", async () => {
+    document.cookie = "seraframe_csrf=from-cookie; Path=/";
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: { code: "unauthorized", message: "authentication required" } }, 401),
+    );
+
+    await expect(api.changePassword({ currentPassword: "old", newPassword: "next" })).rejects.toBeInstanceOf(ApiError);
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+  });
+
+  it("lists sessions without a CSRF header and deletes another session with one", async () => {
+    document.cookie = "seraframe_csrf=from-cookie; Path=/";
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ sessions: [] }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    await api.listSessions();
+    await api.revokeSession("id/with space");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/sessions");
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-CSRF-Token")).toBeNull();
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/auth/sessions/id%2Fwith%20space");
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("DELETE");
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("X-CSRF-Token")).toBe("from-cookie");
+  });
+
+  it("reads prefs and puts appearance without feature toggles", async () => {
+    document.cookie = "seraframe_csrf=from-cookie; Path=/";
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ appearance: null, firstRunAppearanceDone: false }))
+      .mockResolvedValueOnce(jsonResponse({ appearance: "dark", firstRunAppearanceDone: true }))
+      .mockResolvedValueOnce(jsonResponse({ appearance: "light", firstRunAppearanceDone: true }));
+
+    await expect(api.getPrefs()).resolves.toEqual({ appearance: null, firstRunAppearanceDone: false });
+    await api.putPrefs({ appearance: "dark", firstRunAppearanceDone: true });
+    await api.putPrefs({ appearance: "light" });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/prefs");
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-CSRF-Token")).toBeNull();
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("PUT");
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(
+      JSON.stringify({ appearance: "dark", firstRunAppearanceDone: true }),
+    );
+    expect(fetchMock.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({ appearance: "light" }));
+    expect(new Headers(fetchMock.mock.calls[2]?.[1]?.headers).get("X-CSRF-Token")).toBe("from-cookie");
+  });
+
   it("notifies the unauthorized handler on 401", async () => {
     const onUnauthorized = vi.fn();
     setUnauthorizedHandler(onUnauthorized);
