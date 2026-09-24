@@ -8,19 +8,24 @@ The browser UI lives in `client/`. `npm run build` writes it to `client/dist`. T
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `SERAFRAME_ADMIN_PASSWORD` | yes | | Single admin password. Hashed with Argon2 on first boot if no admin row exists. |
-| `SERAFRAME_SECRET_KEY` | yes | | At least 32 bytes. Derives the Fernet key for SFTP secrets. |
-| `SERAFRAME_DATA_DIR` | no | `/data` | SQLite database and thumbnail cache. |
+| `SERAFRAME_ADMIN_PASSWORD` | yes | | Single admin password. The process exits if this is missing or empty. Hashed with Argon2 on first boot if no admin row exists. Not generated. |
+| `SERAFRAME_SECRET_KEY` | no | file under the data dir | Fernet key material for SFTP secrets. See below. |
+| `SERAFRAME_DATA_DIR` | no | `/data` | SQLite database, persisted secret key, and thumbnail cache. |
 | `SERAFRAME_PORT` | no | `8080` | Listen port. |
 | `SERAFRAME_TRUST_PROXY` | no | `0` | Set to `1` when HTTPS is terminated in front of the process. Session and CSRF cookies are then marked `Secure`. |
 
-Copy `.env.example` to `.env` and replace both secrets. Generate a key with:
+`SERAFRAME_SECRET_KEY`:
+
+- If the variable is set, it must be at least 32 bytes. That value is used for the process. `$SERAFRAME_DATA_DIR/secret_key` is not read, created, or overwritten.
+- If the variable is unset or empty, the process reads `$SERAFRAME_DATA_DIR/secret_key`. When the file is missing it generates a key, writes it with mode `0600`, and reuses that file on later starts. A file that is shorter than 32 bytes, or not valid text, stops startup and is left in place.
+
+Copy `.env.example` to `.env` and set the admin password. To supply your own key instead of the persisted file:
 
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Changing `SERAFRAME_ADMIN_PASSWORD` does not update an existing database. Delete `/data/seraframe.sqlite` to bootstrap again. That also removes saved sources and servers.
+Changing `SERAFRAME_ADMIN_PASSWORD` does not update an existing database. Delete `/data/seraframe.sqlite` to bootstrap again. That also removes saved sources and servers. The secret key file is separate; deleting it while the variable is unset generates a new key, and previously stored SFTP secrets will not decrypt.
 
 ## Run with Docker
 
@@ -29,13 +34,30 @@ docker compose build
 docker compose up
 ```
 
-The app listens on port 8080. Open `http://127.0.0.1:8080/` for the login screen (same origin as `/api`). SQLite and thumbnails persist in the `seraframe-data` volume, mounted at `/data`. The image copies `client/dist` to `/app/spa` (`SERAFRAME_SPA_DIR`).
+The app listens on port 8080. Open `http://127.0.0.1:8080/` for the login screen (same origin as `/api`). SQLite, the persisted secret key, and thumbnails stay in the `seraframe-data` volume, mounted at `/data`. The image copies `client/dist` to `/app/spa` (`SERAFRAME_SPA_DIR`).
+
+`SERAFRAME_ADMIN_PASSWORD` is required by Compose. `SERAFRAME_SECRET_KEY` is optional. When it is unset, Compose passes an empty value and the process treats that as unset.
 
 ```bash
 curl -sS http://127.0.0.1:8080/api/auth/csrf
 ```
 
 Login is `POST /api/auth/login` with JSON `{"password":"..."}` and header `X-CSRF-Token` set to the token from the csrf response. The `seraframe_csrf` cookie must be sent with that request.
+
+## Published image
+
+The first proposed release tag is **v0.1.0**. Pushing a `v*.*.*` tag runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml), which pushes `ghcr.io/recognizeyourprivilege/seraframe` to GHCR and opens a GitHub Release. Details are in [RELEASE.md](RELEASE.md).
+
+```bash
+docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
+
+docker run --rm -p 8080:8080 \
+  -e SERAFRAME_ADMIN_PASSWORD='change-me' \
+  -v seraframe-data:/data \
+  ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
+```
+
+Leave `SERAFRAME_SECRET_KEY` unset so the key file is created in the volume and reused on the next start. Set it only when you want that exact value; the file is then left unchanged. The image serves the client UI at `/`.
 
 ## Run locally
 
@@ -46,7 +68,8 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 export SERAFRAME_ADMIN_PASSWORD='change-me'
-export SERAFRAME_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+# Optional. Omit to create and reuse ./data/secret_key.
+# export SERAFRAME_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 export SERAFRAME_DATA_DIR=./data
 export SERAFRAME_PORT=8080
 export SERAFRAME_TRUST_PROXY=0
