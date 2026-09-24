@@ -27,10 +27,6 @@ export function LoginScreen() {
   return (
     <main className="login" id="main">
       <div className="login-card">
-        <p className="login-brand">
-          <img src="/brand/seraframe-icon-locked.png" alt="" width={72} height={72} />
-          SeraFrame
-        </p>
         <h1>Sign in</h1>
         <p className="lede">Private stills and ComfyUI servers. One password, set on the host.</p>
         <form onSubmit={onSubmit} noValidate>
