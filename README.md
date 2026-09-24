@@ -11,7 +11,7 @@ The browser UI lives in `client/`. `npm run build` writes it to `client/dist`. T
 | `SERAFRAME_ADMIN_PASSWORD` | yes | | Single admin password. The process exits if this is missing or empty. Hashed with Argon2 on first boot if no admin row exists. Not generated. |
 | `SERAFRAME_SECRET_KEY` | no | file under the data dir | Fernet key material for SFTP secrets. See below. |
 | `SERAFRAME_DATA_DIR` | no | `/data` | SQLite database, persisted secret key, and thumbnail cache. |
-| `SERAFRAME_PORT` | no | `8080` | Listen port. |
+| `SERAFRAME_PORT` | no | `8081` | Listen port. |
 | `SERAFRAME_TRUST_PROXY` | no | `0` | Set to `1` when HTTPS is terminated in front of the process. Session and CSRF cookies are then marked `Secure`. |
 
 `SERAFRAME_SECRET_KEY`:
@@ -34,12 +34,12 @@ docker compose build
 docker compose up
 ```
 
-The app listens on port 8080. Open `http://127.0.0.1:8080/` for the login screen (same origin as `/api`). SQLite, the persisted secret key, and thumbnails stay in the `seraframe-data` volume, mounted at `/data`. The image copies `client/dist` to `/app/spa` (`SERAFRAME_SPA_DIR`).
+The app listens on port 8081. Open `http://127.0.0.1:8081/` for the login screen (same origin as `/api`). SQLite, the persisted secret key, and thumbnails stay in the `seraframe-data` volume, mounted at `/data`. The image copies `client/dist` to `/app/spa` (`SERAFRAME_SPA_DIR`).
 
 `SERAFRAME_ADMIN_PASSWORD` is required by Compose. `SERAFRAME_SECRET_KEY` is optional. When it is unset, Compose passes an empty value and the process treats that as unset.
 
 ```bash
-curl -sS http://127.0.0.1:8080/api/auth/csrf
+curl -sS http://127.0.0.1:8081/api/auth/csrf
 ```
 
 Login is `POST /api/auth/login` with JSON `{"password":"..."}` and header `X-CSRF-Token` set to the token from the csrf response. The `seraframe_csrf` cookie must be sent with that request.
@@ -51,7 +51,7 @@ The first proposed release tag is **v0.1.0**. Pushing a `v*.*.*` tag runs [`.git
 ```bash
 docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
 
-docker run --rm -p 8080:8080 \
+docker run --rm -p 8081:8081 \
   -e SERAFRAME_ADMIN_PASSWORD='change-me' \
   -v seraframe-data:/data \
   ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
@@ -71,9 +71,9 @@ export SERAFRAME_ADMIN_PASSWORD='change-me'
 # Optional. Omit to create and reuse ./data/secret_key.
 # export SERAFRAME_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 export SERAFRAME_DATA_DIR=./data
-export SERAFRAME_PORT=8080
+export SERAFRAME_PORT=8081
 export SERAFRAME_TRUST_PROXY=0
-uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8080
+uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8081
 ```
 
 ## Tests
@@ -103,12 +103,12 @@ npm run dev
 
 Vite serves the app at `http://127.0.0.1:5173`. In development, MSW answers `/api` so the gallery works without the API process. Sign in with the demo password `seraframe-demo`. A reload clears the mock session.
 
-To call the API on port 8080 instead of the mocks, create `client/.env.development.local`:
+To call the API on port 8081 instead of the mocks, create `client/.env.development.local`:
 
 ```bash
 VITE_USE_MOCKS=false
 ```
 
-The dev server then proxies `/api` to `http://127.0.0.1:8080`. Production builds never start the mock worker. Sign in with `SERAFRAME_ADMIN_PASSWORD`.
+The dev server then proxies `/api` to `http://127.0.0.1:8081`. Production builds never start the mock worker. Sign in with `SERAFRAME_ADMIN_PASSWORD`.
 
 Mutating requests send `X-CSRF-Token`. The API accepts the call only when that header equals the `seraframe_csrf` cookie set by `GET /api/auth/csrf`. A `401` returns the UI to login. Gallery and server data are not rendered until `GET /api/auth/me` succeeds.

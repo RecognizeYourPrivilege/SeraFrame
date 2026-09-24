@@ -22,13 +22,13 @@ Pull and run the published image:
 ```bash
 docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
 
-docker run --rm -p 8080:8080 \
+docker run --rm -p 8081:8081 \
   -e SERAFRAME_ADMIN_PASSWORD='change-me' \
   -v seraframe-data:/data \
   ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
 ```
 
-Open `http://127.0.0.1:8080/` and sign in with that password. The image serves the client UI at `/`.
+Open `http://127.0.0.1:8081/` and sign in with that password. The image serves the client UI at `/`.
 
 `SERAFRAME_ADMIN_PASSWORD` is required. The process exits if it is missing or empty. There is no default password.
 
