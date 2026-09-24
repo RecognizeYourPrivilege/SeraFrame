@@ -27,10 +27,6 @@ export function LoginScreen() {
   return (
     <main className="login" id="main">
       <div className="login-card">
-        <p className="mark">
-          <span className="mark-frame" aria-hidden="true" />
-          SeraFrame
-        </p>
         <h1>Sign in</h1>
         <p className="lede">Private stills and ComfyUI servers. One password, set on the host.</p>
         <form onSubmit={onSubmit} noValidate>
@@ -60,7 +56,7 @@ export function LoginScreen() {
         </form>
         {mocksOn ? (
           <p className="hint">
-            Demo password <code>seraframe-demo</code>. Reload clears the mock session.
+            Mock password <code>seraframe-demo</code>. Reload clears the mock session.
           </p>
         ) : null}
       </div>
