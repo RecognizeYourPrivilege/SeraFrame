@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
+import { formatApiError } from "../api/errors";
 import { usePrefs, type ThemeName } from "../lib/prefs";
+import { useServerPrefs } from "../lib/serverPrefs";
 
 const LOOKS: { theme: ThemeName; title: string; note: string }[] = [
   { theme: "light", title: "Light", note: "Photos" },
   { theme: "dark", title: "Dark", note: "Neon" },
 ];
 
-/** One-time screen after the first password. Later changes stay in the profile menu. */
+/** One-time screen after login when the server says first-run is unfinished. */
 export function AppearancePicker() {
   const { update } = usePrefs();
+  const { finishFirstRun } = useServerPrefs();
   const [choice, setChoice] = useState<ThemeName | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Appearance — SeraFrame";
@@ -17,12 +22,21 @@ export function AppearancePicker() {
 
   function choose(theme: ThemeName) {
     setChoice(theme);
+    setError(null);
     update({ theme });
   }
 
-  function finish() {
-    if (!choice) return;
-    update({ theme: choice, firstRunAppearanceDone: true });
+  async function finish() {
+    if (!choice || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      await finishFirstRun(choice);
+    } catch (err) {
+      setError(formatApiError(err) || "Could not save appearance.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -40,6 +54,7 @@ export function AppearancePicker() {
                 role="radio"
                 className={selected ? "look-card is-selected" : "look-card"}
                 aria-checked={selected}
+                disabled={pending}
                 onClick={() => choose(look.theme)}
               >
                 <span className={look.theme === "light" ? "look-swatch is-photos" : "look-swatch is-neon"} aria-hidden="true" />
@@ -49,8 +64,13 @@ export function AppearancePicker() {
             );
           })}
         </div>
-        <button type="button" className="btn primary wide" onClick={finish} disabled={!choice}>
-          Continue
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <button type="button" className="btn primary wide" onClick={() => void finish()} disabled={!choice || pending}>
+          {pending ? "Saving…" : "Continue"}
         </button>
       </div>
     </main>

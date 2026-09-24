@@ -1,9 +1,11 @@
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api/client";
-import { isAbortError } from "../api/errors";
+import { formatApiError, isAbortError } from "../api/errors";
+import type { Session } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
-import { usePrefs } from "../lib/prefs";
+import { usePrefs, type ThemeName } from "../lib/prefs";
+import { useServerPrefs } from "../lib/serverPrefs";
 import { APP_VERSION } from "../version";
 import { BRAND_ICON_LOCKED } from "./ProfileButton";
 
@@ -17,14 +19,38 @@ type ProfileMenuProps = {
 
 export function ProfileMenu({ anchor, profileRef, onClose }: ProfileMenuProps) {
   const { prefs, update } = usePrefs();
+  const { saveAppearance } = useServerPrefs();
   const { logout } = useAuth();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const [panel, setPanel] = useState<Panel>("home");
-  const [sessionNote, setSessionNote] = useState<"checking" | "active" | "unavailable">("checking");
   const [signingOut, setSigningOut] = useState(false);
+  const [themePending, setThemePending] = useState(false);
+  const [themeError, setThemeError] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const sessionAbort = useRef<AbortController | null>(null);
+
+  const loadSessions = useCallback(async () => {
+    sessionAbort.current?.abort();
+    const controller = new AbortController();
+    sessionAbort.current = controller;
+    setSessionsLoading(true);
+    try {
+      const body = await api.listSessions({ signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setSessions(body.sessions);
+      setSessionsError(null);
+    } catch (err: unknown) {
+      if (isAbortError(err) || controller.signal.aborted) return;
+      setSessionsError(formatApiError(err) || "Could not load sessions.");
+    } finally {
+      if (!controller.signal.aborted) setSessionsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     panelRef.current?.focus();
@@ -32,17 +58,10 @@ export function ProfileMenu({ anchor, profileRef, onClose }: ProfileMenuProps) {
 
   useEffect(() => {
     if (panel !== "session") return;
-    const controller = new AbortController();
-    setSessionNote("checking");
-    api
-      .me({ signal: controller.signal })
-      .then(() => setSessionNote("active"))
-      .catch((err: unknown) => {
-        if (isAbortError(err)) return;
-        setSessionNote("unavailable");
-      });
-    return () => controller.abort();
-  }, [panel]);
+    void loadSessions();
+  }, [panel, loadSessions]);
+
+  useEffect(() => () => sessionAbort.current?.abort(), []);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -76,6 +95,22 @@ export function ProfileMenu({ anchor, profileRef, onClose }: ProfileMenuProps) {
     await logout();
   }
 
+  async function chooseTheme(theme: ThemeName) {
+    if (themePending || prefs.theme === theme) return;
+    const previous = prefs.theme;
+    setThemeError(null);
+    setThemePending(true);
+    update({ theme });
+    try {
+      await saveAppearance(theme);
+    } catch (err: unknown) {
+      update({ theme: previous });
+      setThemeError(formatApiError(err) || "Could not save appearance.");
+    } finally {
+      setThemePending(false);
+    }
+  }
+
   return createPortal(
     <div
       ref={panelRef}
@@ -97,18 +132,25 @@ export function ProfileMenu({ anchor, profileRef, onClose }: ProfileMenuProps) {
               <button
                 type="button"
                 aria-pressed={prefs.theme === "dark"}
-                onClick={() => update({ theme: "dark" })}
+                disabled={themePending}
+                onClick={() => void chooseTheme("dark")}
               >
                 Dark
               </button>
               <button
                 type="button"
                 aria-pressed={prefs.theme === "light"}
-                onClick={() => update({ theme: "light" })}
+                disabled={themePending}
+                onClick={() => void chooseTheme("light")}
               >
                 Light
               </button>
             </div>
+            {themeError ? (
+              <p className="form-error" role="alert">
+                {themeError}
+              </p>
+            ) : null}
           </section>
 
           <section className="menu-block" aria-labelledby="features-heading">
@@ -156,27 +198,26 @@ export function ProfileMenu({ anchor, profileRef, onClose }: ProfileMenuProps) {
 
       {panel === "password" ? (
         <MenuSubpage title="Change password" onBack={() => setPanel("home")}>
-          <p>
-            This server does not expose a change-password API. The admin password is set on the host with{" "}
-            <code>SERAFRAME_ADMIN_PASSWORD</code> and is not updated from the browser.
-          </p>
+          <ChangePasswordForm
+            onChanged={() => {
+              void loadSessions();
+            }}
+          />
         </MenuSubpage>
       ) : null}
 
       {panel === "session" ? (
         <MenuSubpage title="Session & security" onBack={() => setPanel("home")}>
-          <p role="status">
-            {sessionNote === "checking" ? "Checking this session…" : null}
-            {sessionNote === "active" ? "This browser session is active." : null}
-            {sessionNote === "unavailable" ? "This session could not be confirmed." : null}
-          </p>
-          <p>
-            v0.1.0 can confirm the current sign-in (<code>GET /api/auth/me</code>) and end it. It cannot list or
-            revoke other sessions.
-          </p>
-          <button type="button" className="btn danger wide" onClick={() => void signOut()} disabled={signingOut}>
-            {signingOut ? "Signing out…" : "Sign out"}
-          </button>
+          <SessionPanel
+            sessions={sessions}
+            loading={sessionsLoading}
+            error={sessionsError}
+            signingOut={signingOut}
+            onRevoked={() => {
+              void loadSessions();
+            }}
+            onSignOut={() => void signOut()}
+          />
         </MenuSubpage>
       ) : null}
 
@@ -195,6 +236,181 @@ export function ProfileMenu({ anchor, profileRef, onClose }: ProfileMenuProps) {
     </div>,
     document.body,
   );
+}
+
+function ChangePasswordForm({ onChanged }: { onChanged: () => void }) {
+  const currentId = useId();
+  const nextId = useId();
+  const confirmId = useId();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    setError(null);
+    setSuccess(null);
+    if (newPassword !== confirmPassword) {
+      setError("New passwords do not match.");
+      return;
+    }
+    setPending(true);
+    try {
+      await api.changePassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSuccess("Password updated. Other sessions were signed out.");
+      onChanged();
+    } catch (err: unknown) {
+      setError(formatApiError(err) || "Could not change the password.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void onSubmit(event)} noValidate>
+      <p className="switch-hint">Other browsers are signed out when this succeeds. This browser stays signed in.</p>
+      <div className="field">
+        <label htmlFor={currentId}>Current password</label>
+        <input
+          id={currentId}
+          name="current-password"
+          type="password"
+          autoComplete="current-password"
+          value={currentPassword}
+          aria-invalid={error ? true : undefined}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={nextId}>New password</label>
+        <input
+          id={nextId}
+          name="new-password"
+          type="password"
+          autoComplete="new-password"
+          value={newPassword}
+          aria-invalid={error ? true : undefined}
+          onChange={(event) => setNewPassword(event.target.value)}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={confirmId}>Confirm new password</label>
+        <input
+          id={confirmId}
+          name="confirm-password"
+          type="password"
+          autoComplete="new-password"
+          value={confirmPassword}
+          aria-invalid={error ? true : undefined}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+        />
+      </div>
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {success ? (
+        <p className="form-success" role="status">
+          {success}
+        </p>
+      ) : null}
+      <button className="btn primary wide" type="submit" disabled={pending}>
+        {pending ? "Updating…" : "Update password"}
+      </button>
+    </form>
+  );
+}
+
+function SessionPanel({
+  sessions,
+  loading,
+  error,
+  signingOut,
+  onRevoked,
+  onSignOut,
+}: {
+  sessions: Session[] | null;
+  loading: boolean;
+  error: string | null;
+  signingOut: boolean;
+  onRevoked: () => void;
+  onSignOut: () => void;
+}) {
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function revoke(session: Session) {
+    if (session.current || revokingId) return;
+    setRevokingId(session.id);
+    setActionError(null);
+    try {
+      await api.revokeSession(session.id);
+      onRevoked();
+    } catch (err: unknown) {
+      setActionError(formatApiError(err) || "Could not revoke that session.");
+    } finally {
+      setRevokingId(null);
+    }
+  }
+
+  return (
+    <>
+      <p className="switch-hint">Sign out of this browser here. Revoke ends a different session.</p>
+      {loading && !sessions ? (
+        <p role="status">Loading sessions…</p>
+      ) : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {actionError ? (
+        <p className="form-error" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+      {sessions ? (
+        <ul className="session-list">
+          {sessions.map((session) => (
+            <li key={session.id} className={session.current ? "session-row is-current" : "session-row"}>
+              <p className="session-title">{session.current ? "This browser" : "Other session"}</p>
+              <p className="session-meta">{session.userAgent ?? "Unknown client"}</p>
+              {session.ip ? <p className="session-meta">{session.ip}</p> : null}
+              <p className="session-meta">Signed in {formatWhen(session.createdAt)}</p>
+              <p className="session-meta">Last seen {formatWhen(session.lastSeenAt)}</p>
+              {session.current ? null : (
+                <button
+                  type="button"
+                  className="btn danger"
+                  onClick={() => void revoke(session)}
+                  disabled={revokingId !== null}
+                >
+                  {revokingId === session.id ? "Revoking…" : "Revoke"}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <button type="button" className="btn danger wide" onClick={onSignOut} disabled={signingOut}>
+        {signingOut ? "Signing out…" : "Sign out"}
+      </button>
+    </>
+  );
+}
+
+function formatWhen(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function MenuSubpage({ title, onBack, children }: { title: string; onBack: () => void; children: ReactNode }) {

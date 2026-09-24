@@ -16,7 +16,7 @@ Image identity is never a bare filename. Listings and media URLs always carry `s
 
 Codes the client surfaces as text: `unauthorized`, `forbidden`, `not_found`, `validation`, `locked_out`, `csrf`, `path_rejected`, `io_error`, `conflict`.
 
-`401` on any call drops the UI back to login. `429` with `Retry-After` (delta seconds) is shown on the login form for `locked_out`. A mutating call that fails with `csrf` is retried once after a fresh `GET /api/auth/csrf`.
+`401` on any call drops the UI back to login, except `POST /api/auth/change-password` when the message is `current password is incorrect`. That response keeps this session and the form shows the message. `429` with `Retry-After` (delta seconds) is shown on the login form for `locked_out`. A mutating call that fails with `csrf` is retried once after a fresh `GET /api/auth/csrf`.
 
 ## Auth
 

@@ -248,6 +248,11 @@ textarea {
   margin-bottom: 0.75rem;
 }
 
+.form-success {
+  color: var(--presence);
+  margin-bottom: 0.75rem;
+}
+
 .splash,
 .login {
   min-height: 100dvh;
@@ -1192,6 +1197,54 @@ img.is-blurred {
 .menu-sub p + p,
 .about-brand + p {
   margin-top: 0.65rem;
+}
+
+.menu-sub form {
+  margin-top: 0.85rem;
+}
+
+.menu-block .form-error,
+.menu-sub .form-error,
+.menu-sub .form-success {
+  margin-top: 0.65rem;
+}
+
+.session-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.session-row {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: start;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-sunken);
+}
+
+.session-row p {
+  margin-top: 0;
+}
+
+.session-title {
+  font-weight: 700;
+}
+
+.session-meta {
+  color: var(--muted);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.session-row .btn {
+  margin-top: 0.45rem;
+}
+
+.menu-sub .btn.wide {
+  margin-top: 0.85rem;
 }
 
 .about-brand {

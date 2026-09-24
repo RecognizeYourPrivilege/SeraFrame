@@ -111,4 +111,4 @@ VITE_USE_MOCKS=false
 
 The dev server then proxies `/api` to `http://127.0.0.1:18880`. Production builds never start the mock worker. Sign in with `SERAFRAME_ADMIN_PASSWORD`.
 
-Mutating requests send `X-CSRF-Token`. The API accepts the call only when that header equals the `seraframe_csrf` cookie set by `GET /api/auth/csrf`. A `401` returns the UI to login. Gallery and server data are not rendered until `GET /api/auth/me` succeeds.
+Mutating requests send `X-CSRF-Token`. The API accepts the call only when that header equals the `seraframe_csrf` cookie set by `GET /api/auth/csrf`. A `401` returns the UI to login, except a wrong current password on change-password, which stays on that form. Gallery and server data are not rendered until `GET /api/auth/me` succeeds. After that, `GET /api/prefs` decides the one-time Appearance picker.

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import type { CreateSource, Server, Source } from "../api/types";
+import type { Appearance, CreateSource, Server, Session, Source } from "../api/types";
 import {
   DEMO_PASSWORD,
   SUGGESTED_PATHS,
@@ -19,9 +19,59 @@ let authed = false;
 let csrfToken: string | null = null;
 let failures = 0;
 let lockedUntil = 0;
+let adminPassword = DEMO_PASSWORD;
+let appearance: Appearance | null = null;
+let firstRunAppearanceDone = false;
+let sessions: Session[] = [];
 let sources: Source[] = seedSources();
 let servers: Server[] = seedServers();
 let library: Record<string, MockNode> = seedLibrary();
+
+function isoNow() {
+  return new Date().toISOString().slice(0, 19) + "Z";
+}
+
+function prefsPayload() {
+  return { appearance, firstRunAppearanceDone };
+}
+
+function seedSessions() {
+  const now = isoNow();
+  sessions = [
+    {
+      id: "sess-other",
+      createdAt: "2026-09-01T12:00:00Z",
+      lastSeenAt: "2026-09-20T08:30:00Z",
+      userAgent: "Mozilla/5.0 (other device)",
+      ip: "203.0.113.10",
+      current: false,
+    },
+    {
+      id: "sess-this",
+      createdAt: now,
+      lastSeenAt: now,
+      userAgent: "This browser",
+      ip: "127.0.0.1",
+      current: true,
+    },
+  ];
+}
+
+function ensureCurrentSession() {
+  if (sessions.some((session) => session.current)) return;
+  const now = isoNow();
+  sessions = [
+    ...sessions,
+    {
+      id: crypto.randomUUID(),
+      createdAt: now,
+      lastSeenAt: now,
+      userAgent: "This browser",
+      ip: "127.0.0.1",
+      current: true,
+    },
+  ];
+}
 
 function error(status: number, code: string, message: string, headers?: HeadersInit) {
   return HttpResponse.json({ error: { code, message } }, { status, headers });
@@ -136,7 +186,7 @@ export const handlers = [
       return error(429, "locked_out", "Too many attempts.", { "Retry-After": String(seconds) });
     }
     const body = (await request.json()) as { password?: string };
-    if (body.password !== DEMO_PASSWORD) {
+    if (body.password !== adminPassword) {
       failures += 1;
       if (failures >= 5) {
         failures = 0;
@@ -147,6 +197,8 @@ export const handlers = [
     }
     failures = 0;
     authed = true;
+    if (sessions.length === 0) seedSessions();
+    else ensureCurrentSession();
     return HttpResponse.json({ ok: true });
   }),
 
@@ -154,7 +206,84 @@ export const handlers = [
     const csrfError = requireCsrf(request);
     if (csrfError) return csrfError;
     authed = false;
+    sessions = sessions.filter((session) => !session.current);
     return HttpResponse.json({ ok: true });
+  }),
+
+  http.post("/api/auth/change-password", async ({ request }) => {
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+    const denied = requireAuth();
+    if (denied) return denied;
+    const body = (await request.json()) as { currentPassword?: string; newPassword?: string };
+    const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
+    const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";
+    if (currentPassword !== adminPassword) {
+      return error(401, "unauthorized", "current password is incorrect");
+    }
+    if (newPassword.length < 1 || newPassword.length > 1024) {
+      return error(400, "validation", "new password must be 1 to 1024 characters");
+    }
+    adminPassword = newPassword;
+    sessions = sessions.filter((session) => session.current);
+    return HttpResponse.json({ ok: true });
+  }),
+
+  http.get("/api/auth/sessions", () => {
+    const denied = requireAuth();
+    if (denied) return denied;
+    const ordered = [...sessions].sort(
+      (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+    );
+    return HttpResponse.json({ sessions: ordered });
+  }),
+
+  http.delete("/api/auth/sessions/:id", ({ params, request }) => {
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+    const denied = requireAuth();
+    if (denied) return denied;
+    const id = String(params.id);
+    const found = sessions.find((session) => session.id === id);
+    if (!found) return error(404, "not_found", "session not found");
+    if (found.current) return error(400, "validation", "cannot revoke the current session");
+    sessions = sessions.filter((session) => session.id !== id);
+    return HttpResponse.json({ ok: true });
+  }),
+
+  http.get("/api/prefs", () => {
+    const denied = requireAuth();
+    if (denied) return denied;
+    return HttpResponse.json(prefsPayload());
+  }),
+
+  http.put("/api/prefs", async ({ request }) => {
+    const csrfError = requireCsrf(request);
+    if (csrfError) return csrfError;
+    const denied = requireAuth();
+    if (denied) return denied;
+    const body = (await request.json()) as Record<string, unknown>;
+    const allowed = new Set(["appearance", "firstRunAppearanceDone"]);
+    if (Object.keys(body).some((key) => !allowed.has(key))) {
+      return error(400, "validation", "unknown preference field");
+    }
+    const hasAppearance = Object.prototype.hasOwnProperty.call(body, "appearance");
+    const hasDone = Object.prototype.hasOwnProperty.call(body, "firstRunAppearanceDone");
+    if (!hasAppearance && !hasDone) return error(400, "validation", "no preference fields to update");
+    if (hasAppearance && body.appearance !== "light" && body.appearance !== "dark") {
+      return error(400, "validation", "appearance must be light or dark");
+    }
+    if (hasDone && body.firstRunAppearanceDone !== true) {
+      return error(400, "validation", "firstRunAppearanceDone cannot be cleared");
+    }
+    if (hasAppearance) appearance = body.appearance as Appearance;
+    if (body.firstRunAppearanceDone === true) {
+      if (appearance !== "light" && appearance !== "dark") {
+        return error(400, "validation", "appearance is required to finish first run");
+      }
+      firstRunAppearanceDone = true;
+    }
+    return HttpResponse.json(prefsPayload());
   }),
 
   http.get("/api/sources/suggestions", () => {
