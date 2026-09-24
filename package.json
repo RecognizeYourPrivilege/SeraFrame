@@ -1,0 +1,15 @@
+{
+  "name": "seraframe",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "npm install --prefix client",
+    "dev": "npm run dev --prefix client",
+    "build": "npm run build --prefix client",
+    "preview": "npm run preview --prefix client",
+    "typecheck": "npm run typecheck --prefix client",
+    "test": "npm test --prefix client"
+  }
+}

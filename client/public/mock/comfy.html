@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ComfyUI (mock)</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font: 16px/1.45 "Segoe UI", system-ui, sans-serif;
+        background: #1a1c22;
+        color: #f4efe6;
+      }
+      main { padding: 1.25rem; max-width: 40rem; }
+      h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
+      p { color: #c8c2b6; }
+      form { display: grid; gap: 0.75rem; margin-top: 1.25rem; }
+      textarea, button { font: inherit; }
+      textarea {
+        min-height: 6rem;
+        padding: 0.75rem;
+        border-radius: 8px;
+        border: 1px solid rgba(244, 239, 230, 0.2);
+        background: #101116;
+        color: inherit;
+      }
+      button {
+        min-height: 44px;
+        border: 0;
+        border-radius: 8px;
+        background: #e0a15c;
+        color: #1c140c;
+        font-weight: 650;
+      }
+      #log { min-height: 1.5rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ComfyUI mock</h1>
+      <p>
+        Same-origin stand-in so the Servers panel can show a sandboxed frame
+        without a live ComfyUI. SeraFrame v1 does not proxy this URL.
+      </p>
+      <form id="prompt">
+        <label for="text">Prompt</label>
+        <textarea id="text" name="text">a quiet gallery, warm light</textarea>
+        <button type="submit">Queue prompt</button>
+      </form>
+      <p id="log" role="status"></p>
+    </main>
+    <script>
+      document.getElementById("prompt").addEventListener("submit", function (event) {
+        event.preventDefault();
+        var text = document.getElementById("text").value.trim() || "(empty)";
+        document.getElementById("log").textContent = "Queued (mock): " + text;
+      });
+    </script>
+  </body>
+</html>
