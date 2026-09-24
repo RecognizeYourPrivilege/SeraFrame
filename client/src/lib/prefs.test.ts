@@ -19,9 +19,29 @@ describe("prefs", () => {
       serversAutoHide: false,
       showFullPhoto: true,
       blurSensitiveThumbs: true,
+      mobileLayout: 1 as const,
     };
     writePrefs(next, localStorage);
     expect(readPrefs(localStorage)).toEqual(next);
+  });
+
+  it("defaults mobile layout to option 1 and keeps option 2 or 3", () => {
+    localStorage.removeItem(PREFS_KEY);
+    expect(readPrefs(localStorage).mobileLayout).toBe(1);
+
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ mobileLayout: 2 }));
+    expect(readPrefs(localStorage).mobileLayout).toBe(2);
+
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ mobileLayout: 3 }));
+    expect(readPrefs(localStorage).mobileLayout).toBe(3);
+
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ mobileLayout: 9 }));
+    expect(readPrefs(localStorage).mobileLayout).toBe(1);
+
+    const next = { ...DEFAULT_PREFS, mobileLayout: 2 as const };
+    writePrefs(next, localStorage);
+    expect(readPrefs(localStorage).mobileLayout).toBe(2);
+    expect(JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}")).toMatchObject({ mobileLayout: 2 });
   });
 
   it("keeps a saved theme as a display cache and ignores a first-run flag", () => {

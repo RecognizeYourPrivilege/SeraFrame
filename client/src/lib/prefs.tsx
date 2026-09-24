@@ -4,11 +4,16 @@ export const PREFS_KEY = "seraframe.prefs";
 
 export type ThemeName = "light" | "dark";
 
+/** Phone chrome. 1 bottom bar, 2 hamburger, 3 bottom bar with sticky Save. */
+export type MobileLayout = 1 | 2 | 3;
+
 export type Prefs = {
   theme: ThemeName;
   serversAutoHide: boolean;
   showFullPhoto: boolean;
   blurSensitiveThumbs: boolean;
+  /** Client-only. Never copied to `PUT /api/prefs`. */
+  mobileLayout: MobileLayout;
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -16,13 +21,19 @@ export const DEFAULT_PREFS: Prefs = {
   serversAutoHide: true,
   showFullPhoto: true,
   blurSensitiveThumbs: false,
+  mobileLayout: 1,
 };
+
+export function mobileLayoutFrom(value: unknown): MobileLayout {
+  return value === 2 || value === 3 ? value : 1;
+}
 
 /**
  * Browser cache for chrome and feature toggles.
  * Appearance and first-run live on `GET`/`PUT /api/prefs`. A saved theme here
  * is only a display cache: it is not copied to the server, and it does not
  * finish first-run. The cache may paint once before the server response.
+ * Mobile layout stays in this cache only.
  */
 export function readPrefs(storage: Storage | null = typeof localStorage === "undefined" ? null : localStorage): Prefs {
   if (!storage) return DEFAULT_PREFS;
@@ -35,6 +46,7 @@ export function readPrefs(storage: Storage | null = typeof localStorage === "und
       serversAutoHide: parsed.serversAutoHide !== false,
       showFullPhoto: parsed.showFullPhoto !== false,
       blurSensitiveThumbs: parsed.blurSensitiveThumbs === true,
+      mobileLayout: mobileLayoutFrom(parsed.mobileLayout),
     };
   } catch {
     return DEFAULT_PREFS;

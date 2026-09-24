@@ -4,7 +4,7 @@ import { api } from "../api/client";
 import { formatApiError, isAbortError } from "../api/errors";
 import type { Session } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
-import { usePrefs, type ThemeName } from "../lib/prefs";
+import { usePrefs, type MobileLayout, type ThemeName } from "../lib/prefs";
 import { useServerPrefs } from "../lib/serverPrefs";
 import { APP_VERSION } from "../version";
 import { BRAND_ICON_LOCKED } from "./ProfileButton";
@@ -155,6 +155,7 @@ export function ProfileMenu({ anchor, profileRef, onClose }: ProfileMenuProps) {
 
           <section className="menu-block" aria-labelledby="features-heading">
             <h3 id="features-heading">Features</h3>
+            <MobileLayoutPicker value={prefs.mobileLayout} onChange={(mobileLayout) => update({ mobileLayout })} />
             <Switch
               label="Servers auto-hide"
               hint="Hide the top bar and Servers rail after 10 seconds idle."
@@ -422,6 +423,32 @@ function MenuSubpage({ title, onBack, children }: { title: string; onBack: () =>
       <h3>{title}</h3>
       {children}
     </div>
+  );
+}
+
+const MOBILE_LAYOUTS: { id: MobileLayout; label: string }[] = [
+  { id: 1, label: "Option 1 — Bottom bar" },
+  { id: 2, label: "Option 2 — Hamburger / overflow" },
+  { id: 3, label: "Option 3 — Bottom bar + sticky Save" },
+];
+
+function MobileLayoutPicker({ value, onChange }: { value: MobileLayout; onChange: (next: MobileLayout) => void }) {
+  return (
+    <fieldset className="layout-picker">
+      <legend>Mobile layout</legend>
+      <p className="switch-hint">Used at 768px and below. Saved on this device only.</p>
+      {MOBILE_LAYOUTS.map((option) => (
+        <label key={option.id} className={value === option.id ? "layout-option is-selected" : "layout-option"}>
+          <input
+            type="radio"
+            name="mobile-layout"
+            checked={value === option.id}
+            onChange={() => onChange(option.id)}
+          />
+          <span>{option.label}</span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
 

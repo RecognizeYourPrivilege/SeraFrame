@@ -66,7 +66,7 @@ export type Session = {
   current: boolean;
 };
 
-/** Server store. Feature toggles are not part of this object. */
+/** Server store. Feature toggles, including Mobile layout, are not part of this object. */
 export type ServerPrefs = {
   appearance: Appearance | null;
   firstRunAppearanceDone: boolean;
