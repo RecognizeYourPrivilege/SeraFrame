@@ -127,4 +127,4 @@ The client rejects non-http(s) URLs and URLs with embedded credentials before PO
 
 ## Dev wiring
 
-`npm run dev` mocks every route above when `VITE_USE_MOCKS` is not `false`. Set `VITE_USE_MOCKS=false` and the Vite server proxies `/api` to `http://127.0.0.1:8081`.
+`npm run dev` mocks every route above when `VITE_USE_MOCKS` is not `false`. Set `VITE_USE_MOCKS=false` and the Vite server proxies `/api` to `http://127.0.0.1:18880`.

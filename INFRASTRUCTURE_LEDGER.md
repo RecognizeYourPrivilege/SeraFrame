@@ -8,8 +8,8 @@ SeraFrame service, contract v1. This file records how the image is built, how HT
 - Python: 3.12.14, built from the upstream CPython tarball into `/usr/local`, then a virtualenv at `/opt/venv`. Bookworm's archive only ships Python 3.11.
 - Process: `uvicorn app.main:create_app --factory --host 0.0.0.0 --port $SERAFRAME_PORT`
 - User: `seraframe` (uid/gid 10001). The image sets `USER seraframe`. If the entrypoint is started as root, it chowns `SERAFRAME_DATA_DIR` and `exec`s `runuser` so the server is still non-root.
-- Listen: `0.0.0.0:8081` (`SERAFRAME_PORT`)
-- Compose service: `seraframe`, host port `8081`, restart `unless-stopped`
+- Listen: `0.0.0.0:18880` (`SERAFRAME_PORT`)
+- Compose service: `seraframe`, host port `18880`, restart `unless-stopped`
 - Healthcheck: HTTP GET `/` inside the container. `/` is the SPA document, so a healthy container returns HTML 200.
 
 ## SPA bake
@@ -21,7 +21,7 @@ SeraFrame service, contract v1. This file records how the image is built, how HT
 
 The image sets `SERAFRAME_SPA_DIR=/app/spa`. `app/main.py` `_spa_root()` uses that value. When the variable is empty, the fallback is `Path(__file__).resolve().parent.parent / "spa"`. Compose leaves `SERAFRAME_SPA_DIR` at the image default. `.env.example` and `docker-compose.yml` do not list it.
 
-`docker compose up` serves the client at `/` on port 8081. With no session, `client/src/App.tsx` renders `LoginScreen`, so the published port is a login-capable app.
+`docker compose up` serves the client at `/` on port 18880. With no session, `client/src/App.tsx` renders `LoginScreen`, so the published port is a login-capable app.
 
 FastAPI serving in `app/main.py`:
 
@@ -32,7 +32,7 @@ FastAPI serving in `app/main.py`:
 - Registered `/api/*` routes are unchanged. `_spa_response` returns JSON 404 `not_found` for `api` and `api/...`, including unknown API paths.
 - When `index.html` is absent, the response is the built-in placeholder HTML.
 
-`SERAFRAME_SPA_DIR` is the SPA root. `SERAFRAME_DATA_DIR` stays `/data`, `SERAFRAME_PORT` stays `8081`, and `SERAFRAME_TRUST_PROXY` still defaults to `0`. Compose volume `seraframe-data` mounted at `/data` is unchanged. The non-root user remains `seraframe`, uid/gid 10001. `SERAFRAME_ADMIN_PASSWORD` is required. `SERAFRAME_SECRET_KEY` is optional; persistence is under Secrets and auth.
+`SERAFRAME_SPA_DIR` is the SPA root. `SERAFRAME_DATA_DIR` stays `/data`, `SERAFRAME_PORT` stays `18880`, and `SERAFRAME_TRUST_PROXY` still defaults to `0`. Compose volume `seraframe-data` mounted at `/data` is unchanged. The non-root user remains `seraframe`, uid/gid 10001. `SERAFRAME_ADMIN_PASSWORD` is required. `SERAFRAME_SECRET_KEY` is optional; persistence is under Secrets and auth.
 
 ## Persistence
 
@@ -50,7 +50,7 @@ Images larger than 64 MiB are refused.
 
 ## Network
 
-- Inbound: TCP 8081 only
+- Inbound: TCP 18880 only
 - Outbound: SFTP to hosts an authenticated admin configures
 - No ComfyUI reverse proxy. The API stores `http` or `https` URLs. The frontend opens them.
 
@@ -79,7 +79,7 @@ docker compose build
 docker compose up
 ```
 
-`SERAFRAME_ADMIN_PASSWORD` must be set in the shell or in a `.env` file next to `docker-compose.yml`. `SERAFRAME_SECRET_KEY` may be omitted. Compose then passes an empty value, which the process treats as unset. Open `http://127.0.0.1:8081/` and sign in with `SERAFRAME_ADMIN_PASSWORD`.
+`SERAFRAME_ADMIN_PASSWORD` must be set in the shell or in a `.env` file next to `docker-compose.yml`. `SERAFRAME_SECRET_KEY` may be omitted. Compose then passes an empty value, which the process treats as unset. Open `http://127.0.0.1:18880/` and sign in with `SERAFRAME_ADMIN_PASSWORD`.
 
 ## Publish
 
