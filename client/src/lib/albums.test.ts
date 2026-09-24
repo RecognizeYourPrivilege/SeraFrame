@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Source } from "../api/types";
-import { collectAlbums } from "./albums";
+import { collectAlbums, sourceConnectionText } from "./albums";
 
 const sftp: Source = {
   id: "src-sftp",
@@ -92,7 +92,9 @@ describe("collectAlbums", () => {
       requestTimeoutMs: 30,
     });
 
-    expect(failures).toEqual(["studio-nas: This folder took too long to respond."]);
+    expect(failures).toEqual([
+      { sourceId: "src-sftp", message: "studio-nas: This folder took too long to respond." },
+    ]);
     expect(albums.map((album) => album.sourceId)).toEqual(["src-local"]);
     expect(albums[0]?.stillCount).toBe(1);
   });
@@ -115,8 +117,22 @@ describe("collectAlbums", () => {
 
     const { albums, failures } = await collectAlbums([sftp, local], new AbortController().signal);
 
-    expect(failures).toEqual(["studio-nas: sftp request failed"]);
+    expect(failures).toEqual([{ sourceId: "src-sftp", message: "studio-nas: sftp request failed" }]);
     expect(albums).toHaveLength(1);
     expect(albums[0]?.title).toBe("comfyui_output");
+  });
+
+  it("describes a source as connected before folders finish, then empty or failed", () => {
+    expect(sourceConnectionText("src-sftp", "loading", [], 0).text).toBe("Connected. Checking folders…");
+    expect(sourceConnectionText("src-sftp", "ready", [], 0).text).toBe("Connected. No photos in this source yet.");
+    expect(sourceConnectionText("src-sftp", "ready", [], 2).text).toBe("Connected");
+    const failed = sourceConnectionText(
+      "src-sftp",
+      "ready",
+      [{ sourceId: "src-sftp", message: "studio-nas: sftp request failed" }],
+      0,
+    );
+    expect(failed.role).toBe("alert");
+    expect(failed.text).toBe("studio-nas: sftp request failed");
   });
 });
