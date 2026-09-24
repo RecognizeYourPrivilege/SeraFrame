@@ -52,7 +52,7 @@ class Settings:
 def load_settings() -> Settings:
     password = os.environ.get("SERAFRAME_ADMIN_PASSWORD")
     data_dir = Path(os.environ.get("SERAFRAME_DATA_DIR", "/data"))
-    port_raw = os.environ.get("SERAFRAME_PORT", "8080")
+    port_raw = os.environ.get("SERAFRAME_PORT", "8081")
     trust_raw = os.environ.get("SERAFRAME_TRUST_PROXY", "0")
 
     if password is None or password.strip() == "":
