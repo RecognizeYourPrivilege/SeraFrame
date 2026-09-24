@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useVisualViewport } from "../lib/hooks";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -15,9 +16,16 @@ type DialogProps = {
   description?: string;
   onClose: () => void;
   children: ReactNode;
+  /**
+   * Phone Add source actions.
+   * `scroll` keeps Save in the form so it can be scrolled into view.
+   * `sticky` pins Save above the keyboard.
+   */
+  phoneActions?: "scroll" | "sticky";
 };
 
-export function Dialog({ title, description, onClose, children }: DialogProps) {
+export function Dialog({ title, description, onClose, children, phoneActions }: DialogProps) {
+  useVisualViewport();
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -65,15 +73,23 @@ export function Dialog({ title, description, onClose, children }: DialogProps) {
     };
   }, []);
 
+  const sheet = phoneActions === "scroll" || phoneActions === "sticky";
+  const dialogClass = sheet
+    ? phoneActions === "sticky"
+      ? "dialog is-sheet is-sticky-save"
+      : "dialog is-sheet is-scroll-save"
+    : "dialog";
+
   return createPortal(
-    <div className="backdrop" onMouseDown={() => onCloseRef.current()}>
+    <div className={sheet ? "backdrop is-sheet-backdrop" : "backdrop"} onMouseDown={() => onCloseRef.current()}>
       <div
         ref={panelRef}
-        className="dialog"
+        className={dialogClass}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
+        data-save-mode={phoneActions}
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
