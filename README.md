@@ -2,7 +2,7 @@
 
 Backend for browsing stills from local directories and SFTP, plus a list of ComfyUI server URLs. The HTTP contract is [INTEGRATION_CONTRACT_v1.md](INTEGRATION_CONTRACT_v1.md). Infrastructure notes are in [INFRASTRUCTURE_LEDGER.md](INFRASTRUCTURE_LEDGER.md).
 
-`GET /` is a placeholder page. The browser UI is a separate frontend.
+The browser UI lives in `client/`. `GET /` on the API is a placeholder page. The API and Docker image are the Python app in `app/`; the client does not replace them.
 
 ## Environment
 
@@ -62,3 +62,28 @@ pytest
 ## v1 scope
 
 Sources are local directories or SFTP. Paths are sandboxed. SFTP passwords and private keys are encrypted at rest and are not returned by GET. Thumbnails are generated on demand and cached under the data directory. ComfyUI servers are name and URL only. This service does not proxy ComfyUI, write to sources, or speak FTP.
+
+## FRONT (client UI)
+
+The client is a Vite + React + TypeScript SPA in `client/`. It calls the routes in [INTEGRATION_CONTRACT_v1.md](INTEGRATION_CONTRACT_v1.md) as implemented in `app/main.py`. Notes on how the client uses that contract are in [docs/front-api-expectations.md](docs/front-api-expectations.md). The component map is [COMPONENT_LEDGER.md](COMPONENT_LEDGER.md).
+
+### Run the UI
+
+From the repo root:
+
+```bash
+npm install
+npm run dev
+```
+
+Vite serves the app at `http://127.0.0.1:5173`. In development, MSW answers `/api` so the gallery works without the API process. Sign in with the demo password `seraframe-demo`. A reload clears the mock session.
+
+To call the API on port 8080 instead of the mocks, create `client/.env.development.local`:
+
+```bash
+VITE_USE_MOCKS=false
+```
+
+The dev server then proxies `/api` to `http://127.0.0.1:8080`. Production builds never start the mock worker. Sign in with `SERAFRAME_ADMIN_PASSWORD`.
+
+Mutating requests send `X-CSRF-Token`. The API accepts the call only when that header equals the `seraframe_csrf` cookie set by `GET /api/auth/csrf`. A `401` returns the UI to login. Gallery and server data are not rendered until `GET /api/auth/me` succeeds.
