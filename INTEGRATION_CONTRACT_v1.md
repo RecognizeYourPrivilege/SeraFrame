@@ -96,11 +96,13 @@ type Server = { id: string; name: string; url: string }; // url must be http(s)
 No proxy endpoints in v1. FRONT embeds `url` in sandboxed iframe; on block, open externally.
 
 ## Bootstrap / env (infra, not FRONT calls)
-- `SERAFRAME_ADMIN_PASSWORD` — initial password (hashed on first boot if no user row)
-- `SERAFRAME_SECRET_KEY` — session + Fernet key material (≥32 bytes random)
-- `SERAFRAME_DATA_DIR` — default `/data` (sqlite, secrets blob, thumb cache)
+- `SERAFRAME_ADMIN_PASSWORD` — **required**. Process exits if missing or empty. No default and no generated password. Hashed on first boot if no user row.
+- `SERAFRAME_SECRET_KEY` — optional session + Fernet key material. If set, the value (≥32 bytes) is used and `$SERAFRAME_DATA_DIR/secret_key` is not read or written. If unset or empty, that file is reused, or created (mode `0600`) on first start and reused after that.
+- `SERAFRAME_DATA_DIR` — default `/data` (sqlite, `secret_key`, thumb cache)
 - `SERAFRAME_PORT` — default `8080`
 - `SERAFRAME_TRUST_PROXY` — `1` when HTTPS terminated upstream (Secure cookies)
+
+Published image (tag push `v*.*.*`, first proposed tag `v0.1.0`): `ghcr.io/recognizeyourprivilege/seraframe`. See [RELEASE.md](RELEASE.md).
 
 ## Versioning
 Contract **v1**. Breaking changes = new version bump posted in SeraFrame room before FRONT adopts.

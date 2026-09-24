@@ -1,6 +1,6 @@
 # Infrastructure ledger
 
-SeraFrame service, contract v1. This file records how the image is built, how HTTP is served, and where state is kept. It matches `main` baseline `6109125` plus the SPA bake on `054f4b0`.
+SeraFrame service, contract v1. This file records how the image is built, how HTTP is served, and where state is kept. The image bakes the client and serves it at `/`. Secret persistence and the GHCR publish path are recorded below.
 
 ## Runtime
 
@@ -32,7 +32,7 @@ FastAPI serving in `app/main.py`:
 - Registered `/api/*` routes are unchanged. `_spa_response` returns JSON 404 `not_found` for `api` and `api/...`, including unknown API paths.
 - When `index.html` is absent, the response is the built-in placeholder HTML.
 
-`SERAFRAME_SPA_DIR` is the only new `SERAFRAME_*` variable. The others are unchanged in `app/config.py` and `docker-compose.yml`: `SERAFRAME_ADMIN_PASSWORD`, `SERAFRAME_SECRET_KEY`, `SERAFRAME_DATA_DIR` (`/data`), `SERAFRAME_PORT` (`8080`), and `SERAFRAME_TRUST_PROXY` (default `0`). Compose volume `seraframe-data` mounted at `/data` is unchanged. The non-root user remains `seraframe`, uid/gid 10001.
+`SERAFRAME_SPA_DIR` is the SPA root. `SERAFRAME_DATA_DIR` stays `/data`, `SERAFRAME_PORT` stays `8080`, and `SERAFRAME_TRUST_PROXY` still defaults to `0`. Compose volume `seraframe-data` mounted at `/data` is unchanged. The non-root user remains `seraframe`, uid/gid 10001. `SERAFRAME_ADMIN_PASSWORD` is required. `SERAFRAME_SECRET_KEY` is optional; persistence is under Secrets and auth.
 
 ## Persistence
 
@@ -41,6 +41,7 @@ Compose volume `seraframe-data` mounted at `/data` (`SERAFRAME_DATA_DIR`).
 | Path | Contents |
 | --- | --- |
 | `/data/seraframe.sqlite` | Admin hash, sessions, sources, servers, SFTP host-key fingerprints |
+| `/data/secret_key` | Persisted Fernet key material when `SERAFRAME_SECRET_KEY` is unset or empty. Mode `0600`. Not created or overwritten when the variable is set. |
 | `/data/thumbs/{source_id}/{hash}-{version}.webp` | Thumbnail cache |
 
 Deleting a source removes that source's thumbnail directory. The cache key is source id, relative path, and file mtime (or SFTP mtime). Long edge is 256px, WebP.
@@ -59,14 +60,17 @@ Images larger than 64 MiB are refused.
 - Five failed logins lock the account for 15 minutes. Further attempts get HTTP 429 and `Retry-After`.
 - Session cookie `seraframe_session`: HttpOnly, SameSite=Lax, 7 days. `Secure` when `SERAFRAME_TRUST_PROXY=1`.
 - CSRF: `GET /api/auth/csrf` returns `csrfToken` and sets non-HttpOnly cookie `seraframe_csrf`. `POST`, `PUT`, `PATCH`, and `DELETE` under `/api/` must send `X-CSRF-Token` equal to that cookie.
-- `SERAFRAME_SECRET_KEY` (at least 32 bytes) is hashed with SHA-256 and used as a Fernet key (AES-128-CBC with HMAC-SHA256). SFTP passwords and private keys are stored as Fernet tokens. GET responses expose only `hasPassword` and `hasPrivateKey`.
+- `SERAFRAME_ADMIN_PASSWORD` has no default. A missing or empty value stops startup before any secret file is written.
+- `SERAFRAME_SECRET_KEY`, when set and at least 32 bytes, is the key material for that process. The file `/data/secret_key` is left untouched (not read, not created, not replaced).
+- When `SERAFRAME_SECRET_KEY` is unset or empty, startup reads `/data/secret_key`. If the file is missing, the process generates a key (`secrets.token_urlsafe(32)`), writes it with mode `0600`, and reuses it on the next start. A file that is too short or not valid text is rejected and not replaced.
+- The resolved key is hashed with SHA-256 and used as a Fernet key (AES-128-CBC with HMAC-SHA256). SFTP passwords and private keys are stored as Fernet tokens. GET responses expose only `hasPassword` and `hasPrivateKey`. A key that was only supplied through the environment is not copied into the file, so a later start without the variable will not reuse that env value unless the file already holds it.
 - SFTP host keys are trust-on-first-use. The fingerprint is stored in `host_keys`. A changed key is rejected.
 - The client does not use ssh-agent or default `~/.ssh` identity files.
 - Relative paths with `..`, a leading `/`, a backslash, or NUL are rejected with `path_rejected`. A symlink whose target resolves outside the source root is rejected the same way and omitted from listings.
 
 ## Reset
 
-Delete `/data/seraframe.sqlite` and restart to bootstrap the admin password from the environment again. Sources, servers, sessions, and host keys in that file are removed. Thumbnail files under `/data/thumbs` can be deleted separately.
+Delete `/data/seraframe.sqlite` and restart to bootstrap the admin password from the environment again. Sources, servers, sessions, and host keys in that file are removed. Thumbnail files under `/data/thumbs` can be deleted separately. `/data/secret_key` is independent of the database. Deleting it while `SERAFRAME_SECRET_KEY` is unset generates a new key on the next start, and SFTP secrets already stored in SQLite will not decrypt.
 
 ## Build
 
@@ -75,4 +79,19 @@ docker compose build
 docker compose up
 ```
 
-`SERAFRAME_ADMIN_PASSWORD` and `SERAFRAME_SECRET_KEY` must be set in the shell or in a `.env` file next to `docker-compose.yml`. Open `http://127.0.0.1:8080/` and sign in with `SERAFRAME_ADMIN_PASSWORD`.
+`SERAFRAME_ADMIN_PASSWORD` must be set in the shell or in a `.env` file next to `docker-compose.yml`. `SERAFRAME_SECRET_KEY` may be omitted. Compose then passes an empty value, which the process treats as unset. Open `http://127.0.0.1:8080/` and sign in with `SERAFRAME_ADMIN_PASSWORD`.
+
+## Publish
+
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs on git tags `v*.*.*`. The image includes the baked client, so `/` is the login screen.
+
+- Registry image: `ghcr.io/recognizeyourprivilege/seraframe` (GHCR lowercases the repository name)
+- First proposed tag: `v0.1.0`, also pushed as `0.1.0`, `0.1`, and `latest`
+- The same workflow creates a GitHub Release for that tag
+- Registry login uses `GITHUB_TOKEN` (`packages: write`). The release step needs `contents: write`
+
+```bash
+docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
+```
+
+Pull and run notes are in [RELEASE.md](RELEASE.md). Runtime still requires `SERAFRAME_ADMIN_PASSWORD`. Omit `SERAFRAME_SECRET_KEY` to persist the key in the data volume.
