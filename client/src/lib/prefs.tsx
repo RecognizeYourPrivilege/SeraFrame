@@ -14,7 +14,7 @@ export type Prefs = {
 export const DEFAULT_PREFS: Prefs = {
   theme: "dark",
   serversAutoHide: true,
-  showFullPhoto: false,
+  showFullPhoto: true,
   blurSensitiveThumbs: false,
 };
 
@@ -27,7 +27,7 @@ export function readPrefs(storage: Storage | null = typeof localStorage === "und
     return {
       theme: parsed.theme === "light" ? "light" : "dark",
       serversAutoHide: parsed.serversAutoHide !== false,
-      showFullPhoto: parsed.showFullPhoto === true,
+      showFullPhoto: parsed.showFullPhoto !== false,
       blurSensitiveThumbs: parsed.blurSensitiveThumbs === true,
     };
   } catch {
