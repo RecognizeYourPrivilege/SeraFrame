@@ -12,6 +12,13 @@ export type Album = {
   coverUrl: string | null;
 };
 
+export type FolderFailure = {
+  sourceId: string;
+  message: string;
+};
+
+export type FolderPhase = "loading" | "ready";
+
 const MAX_DEPTH = 8;
 
 /** One stalled folder must not leave the gallery on "Loading library…". */
@@ -31,10 +38,23 @@ function folderLabel(source: Source, path: string): string {
   return path ? `${source.label} / ${path}` : source.label;
 }
 
-function failureText(source: Source, path: string, err: unknown): string {
-  const detail = formatApiError(err);
+function failureText(source: Source, path: string, err: unknown): FolderFailure {
+  const detail = formatApiError(err) || "Could not load this folder.";
   const label = folderLabel(source, path);
-  return detail ? `${label}: ${detail}` : label;
+  return { sourceId: source.id, message: `${label}: ${detail}` };
+}
+
+export function sourceConnectionText(
+  sourceId: string,
+  folderStatus: FolderPhase,
+  failures: FolderFailure[],
+  albumCount: number,
+): { role: "status" | "alert"; text: string } {
+  const own = failures.filter((failure) => failure.sourceId === sourceId);
+  if (own.length > 0) return { role: "alert", text: own.map((failure) => failure.message).join(" ") };
+  if (folderStatus === "loading") return { role: "status", text: "Connected. Checking folders…" };
+  if (albumCount === 0) return { role: "status", text: "Connected. No photos in this source yet." };
+  return { role: "status", text: "Connected" };
 }
 
 function thumbUrl(sourceId: string, relPath: string): string {
@@ -65,7 +85,7 @@ async function walk(
   path: string,
   depth: number,
   albums: Album[],
-  failures: string[],
+  failures: FolderFailure[],
   signal: AbortSignal,
   timeoutMs: number,
 ): Promise<void> {
@@ -105,10 +125,10 @@ export async function collectAlbums(
   sources: Source[],
   signal: AbortSignal,
   options: { requestTimeoutMs?: number } = {},
-): Promise<{ albums: Album[]; failures: string[] }> {
+): Promise<{ albums: Album[]; failures: FolderFailure[] }> {
   const timeoutMs = options.requestTimeoutMs ?? DEFAULT_FOLDER_TIMEOUT_MS;
   const albums: Album[] = [];
-  const failures: string[] = [];
+  const failures: FolderFailure[] = [];
   for (const source of sources) {
     await walk(source, "", 0, albums, failures, signal, timeoutMs);
   }
