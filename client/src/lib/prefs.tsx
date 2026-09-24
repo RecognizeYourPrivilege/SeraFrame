@@ -9,8 +9,6 @@ export type Prefs = {
   serversAutoHide: boolean;
   showFullPhoto: boolean;
   blurSensitiveThumbs: boolean;
-  /** False until the one-time Appearance picker is finished. */
-  firstRunAppearanceDone: boolean;
 };
 
 export const DEFAULT_PREFS: Prefs = {
@@ -18,21 +16,14 @@ export const DEFAULT_PREFS: Prefs = {
   serversAutoHide: true,
   showFullPhoto: true,
   blurSensitiveThumbs: false,
-  firstRunAppearanceDone: false,
 };
 
 /**
- * Missing storage means first run. A saved theme with no flag is an upgrade
- * and counts as done. An explicit false flag still shows the picker.
+ * Browser cache for chrome and feature toggles.
+ * Appearance and first-run live on `GET`/`PUT /api/prefs`. A saved theme here
+ * is only a display cache: it is not copied to the server, and it does not
+ * finish first-run. The cache may paint once before the server response.
  */
-export function firstRunAppearanceDoneFrom(stored: unknown): boolean {
-  if (!stored || typeof stored !== "object") return false;
-  const parsed = stored as Partial<Prefs>;
-  if (parsed.firstRunAppearanceDone === true) return true;
-  if (parsed.firstRunAppearanceDone === false) return false;
-  return parsed.theme === "light" || parsed.theme === "dark";
-}
-
 export function readPrefs(storage: Storage | null = typeof localStorage === "undefined" ? null : localStorage): Prefs {
   if (!storage) return DEFAULT_PREFS;
   try {
@@ -44,7 +35,6 @@ export function readPrefs(storage: Storage | null = typeof localStorage === "und
       serversAutoHide: parsed.serversAutoHide !== false,
       showFullPhoto: parsed.showFullPhoto !== false,
       blurSensitiveThumbs: parsed.blurSensitiveThumbs === true,
-      firstRunAppearanceDone: firstRunAppearanceDoneFrom(parsed),
     };
   } catch {
     return DEFAULT_PREFS;

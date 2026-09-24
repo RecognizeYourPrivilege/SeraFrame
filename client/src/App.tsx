@@ -2,7 +2,8 @@ import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { AppearancePicker } from "./components/AppearancePicker";
 import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/LoginScreen";
-import { PrefsProvider, usePrefs } from "./lib/prefs";
+import { PrefsProvider } from "./lib/prefs";
+import { ServerPrefsProvider, useServerPrefs } from "./lib/serverPrefs";
 
 export function App() {
   return (
@@ -16,7 +17,6 @@ export function App() {
 
 function AuthGate() {
   const { status } = useAuth();
-  const { prefs } = usePrefs();
   if (status === "loading") {
     return (
       <div className="splash" role="status">
@@ -25,6 +25,37 @@ function AuthGate() {
     );
   }
   if (status === "anonymous") return <LoginScreen />;
-  if (!prefs.firstRunAppearanceDone) return <AppearancePicker />;
+  return (
+    <ServerPrefsProvider>
+      <SignedIn />
+    </ServerPrefsProvider>
+  );
+}
+
+function SignedIn() {
+  const server = useServerPrefs();
+  if (server.status === "loading") {
+    return (
+      <div className="splash" role="status">
+        Loading preferences…
+      </div>
+    );
+  }
+  if (server.status === "error" || !server.prefs) {
+    return (
+      <main className="login" id="main">
+        <div className="login-card">
+          <h1>Preferences</h1>
+          <p className="form-error" role="alert">
+            {server.error ?? "Could not load preferences."}
+          </p>
+          <button type="button" className="btn primary wide" onClick={server.reload}>
+            Try again
+          </button>
+        </div>
+      </main>
+    );
+  }
+  if (!server.prefs.firstRunAppearanceDone) return <AppearancePicker />;
   return <AppShell />;
 }

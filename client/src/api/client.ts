@@ -1,10 +1,14 @@
 import { ApiError, isAbortError } from "./errors";
 import type {
+  ChangePasswordBody,
   CreateSource,
   CsrfResponse,
   MeResponse,
   Ok,
   Server,
+  ServerPrefs,
+  ServerPrefsPatch,
+  Session,
   Source,
   Still,
   TreeEntry,
@@ -18,6 +22,9 @@ import type {
  */
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** Contract message for a wrong current password. The session stays signed in. */
+const WRONG_CURRENT_PASSWORD = "current password is incorrect";
 
 type UnauthorizedHandler = () => void;
 
@@ -154,10 +161,9 @@ async function request<T>(path: string, init: RequestInitJson, csrfRetry = true)
     throw new ApiError(0, "io_error", "Network error. Check your connection.");
   }
 
-  if (res.status === 401) onUnauthorized?.();
-
   if (!res.ok) {
     const apiError = await toApiError(res);
+    if (res.status === 401 && !isWrongCurrentPassword(path, apiError)) onUnauthorized?.();
     if (apiError.code === "csrf" && csrfRetry && MUTATING.has(method)) {
       clearCsrfToken();
       await ensureCsrf(true);
@@ -167,6 +173,10 @@ async function request<T>(path: string, init: RequestInitJson, csrfRetry = true)
   }
 
   return (await res.json()) as T;
+}
+
+function isWrongCurrentPassword(path: string, error: ApiError): boolean {
+  return path === "/api/auth/change-password" && error.message === WRONG_CURRENT_PASSWORD;
 }
 
 function withPath(base: string, path?: string): string {
@@ -185,6 +195,19 @@ export const api = {
     request<Ok>("/api/auth/login", { method: "POST", body: { password }, ...opts }),
 
   logout: (opts: RequestOptions = {}) => request<Ok>("/api/auth/logout", { method: "POST", ...opts }),
+
+  changePassword: (body: ChangePasswordBody, opts: RequestOptions = {}) =>
+    request<Ok>("/api/auth/change-password", { method: "POST", body, ...opts }),
+
+  listSessions: (opts: RequestOptions = {}) => request<{ sessions: Session[] }>("/api/auth/sessions", opts),
+
+  revokeSession: (id: string, opts: RequestOptions = {}) =>
+    request<Ok>(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE", ...opts }),
+
+  getPrefs: (opts: RequestOptions = {}) => request<ServerPrefs>("/api/prefs", opts),
+
+  putPrefs: (body: ServerPrefsPatch, opts: RequestOptions = {}) =>
+    request<ServerPrefs>("/api/prefs", { method: "PUT", body, ...opts }),
 
   listSources: (opts: RequestOptions = {}) => request<{ sources: Source[] }>("/api/sources", opts),
 
