@@ -520,7 +520,7 @@ function Status({
 function FailureNote({ failures }: { failures: string[] }) {
   if (failures.length === 0) return null;
   return (
-    <p className="status-line" role="status">
+    <p className="status-line" role="alert">
       Some folders could not be loaded: {failures.join(", ")}.
     </p>
   );
