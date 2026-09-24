@@ -99,7 +99,7 @@ No proxy endpoints in v1. FRONT embeds `url` in sandboxed iframe; on block, open
 - `SERAFRAME_ADMIN_PASSWORD` — **required**. Process exits if missing or empty. No default and no generated password. Hashed on first boot if no user row.
 - `SERAFRAME_SECRET_KEY` — optional session + Fernet key material. If set, the value (≥32 bytes) is used and `$SERAFRAME_DATA_DIR/secret_key` is not read or written. If unset or empty, that file is reused, or created (mode `0600`) on first start and reused after that.
 - `SERAFRAME_DATA_DIR` — default `/data` (sqlite, `secret_key`, thumb cache)
-- `SERAFRAME_PORT` — default `8081`
+- `SERAFRAME_PORT` — default `18880`
 - `SERAFRAME_TRUST_PROXY` — `1` when HTTPS terminated upstream (Secure cookies)
 
 Published image (tag push `v*.*.*`, first proposed tag `v0.1.0`): `ghcr.io/recognizeyourprivilege/seraframe`. See [RELEASE.md](RELEASE.md).
