@@ -286,6 +286,96 @@ textarea {
   margin-top: 0.9rem;
 }
 
+.appearance-gate {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(60, 157, 255, 0.16), transparent 55%),
+    var(--bg);
+}
+
+.appearance-card {
+  width: min(36rem, 100%);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.35rem;
+  box-shadow: var(--shadow);
+}
+
+.appearance-card h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.appearance-card .lede {
+  margin: 0.45rem 0 1.1rem;
+}
+
+.look-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1.1rem;
+}
+
+.look-card {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: start;
+  min-height: 44px;
+  padding: 0.7rem;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  text-align: left;
+  color: inherit;
+}
+
+.look-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.look-swatch {
+  display: block;
+  width: 100%;
+  height: 4.5rem;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.look-swatch.is-photos {
+  background:
+    linear-gradient(#f7f8fb, #f7f8fb) 0 0 / 100% 38% no-repeat,
+    linear-gradient(90deg, #ff4fd8, #7a5cff, #3ecbff) 0 100% / 100% 62% no-repeat;
+}
+
+.look-swatch.is-neon {
+  background:
+    linear-gradient(#12141c, #12141c) 0 0 / 100% 38% no-repeat,
+    radial-gradient(circle at 70% 70%, #e100ff, #241038 58%);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.look-title {
+  font-weight: 700;
+}
+
+.look-note {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+@media (max-width: 560px) {
+  .look-choices {
+    grid-template-columns: 1fr;
+  }
+}
+
 code {
   font-family: ui-monospace, "Cascadia Code", monospace;
   font-size: 0.92em;
