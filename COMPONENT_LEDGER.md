@@ -15,7 +15,7 @@ FRONT lives in `client/`. `npm run build` writes `client/dist`. The Docker image
 | `ProfileMenu.tsx` | `client/src/components/ProfileMenu.tsx` | Appearance, features, password note, session, About, sign out | `prefs.tsx`, `AuthProvider.tsx` |
 | `ProfileButton.tsx` | `client/src/components/ProfileButton.tsx` | Locked ring icon. Top bar chip and floating button. Green badge when a server frame is ready | — |
 | `ServersRail.tsx` | `client/src/components/ServersRail.tsx` | Server list. Fully removed with the top bar after idle. Not a peek rail | `AddServerDialog.tsx` |
-| `prefs.tsx` | `client/src/lib/prefs.tsx` | Light/dark, auto-hide, full photo, blur, `firstRunAppearanceDone`. `localStorage` key `seraframe.prefs` | — |
+| `prefs.tsx` | `client/src/lib/prefs.tsx` | Light/dark, auto-hide, full photo, blur, `firstRunAppearanceDone`. `localStorage` key `seraframe.prefs`. Feature toggles stay here. Server Appearance is `GET`/`PUT /api/prefs`; this client still uses local storage until FRONT wires that | — |
 | `Dialog.tsx` | `client/src/components/Dialog.tsx` | Modal, focus trap, Escape, portaled so the page can be `inert` | — |
 
 ## Gallery

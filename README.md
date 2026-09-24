@@ -25,7 +25,7 @@ Copy `.env.example` to `.env` and set the admin password. To supply your own key
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Changing `SERAFRAME_ADMIN_PASSWORD` does not update an existing database. Delete `/data/seraframe.sqlite` to bootstrap again. That also removes saved sources and servers. The secret key file is separate; deleting it while the variable is unset generates a new key, and previously stored SFTP secrets will not decrypt.
+Changing `SERAFRAME_ADMIN_PASSWORD` does not update an existing database. A signed-in admin changes the stored hash with `POST /api/auth/change-password` (see the contract). That does not rewrite the environment variable, and the next start still keeps the hash in SQLite. Delete `/data/seraframe.sqlite` to bootstrap again from the environment. That also removes saved sources, servers, sessions, and appearance prefs. The secret key file is separate; deleting it while the variable is unset generates a new key, and previously stored SFTP secrets will not decrypt.
 
 ## Run with Docker
 
