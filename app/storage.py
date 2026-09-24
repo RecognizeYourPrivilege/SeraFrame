@@ -32,6 +32,19 @@ logger = logging.getLogger("seraframe.storage")
 
 Listed = tuple[str, bool, str, int | None]
 
+# One stuck stat/realpath must not pin the gallery on "Loading library…".
+_SFTP_CALL_TIMEOUT = 20
+_SFTP_LIST_TIMEOUT = 40
+
+_KIND_DIR = "dir"
+_KIND_FILE = "file"
+_KIND_SKIP = "skip"
+_KIND_UNKNOWN = "unknown"
+
+# SFTP file types that are not photos and must not be followed with stat().
+# stat() follows symlinks; a link loop or a wedged target stalls the listing.
+_SKIP_FILE_TYPES = {3, 4, 6, 7, 8, 9}
+
 
 def validate_private_key(private_key: str, password: str | None) -> None:
     try:
@@ -254,11 +267,64 @@ async def _real_inside(sftp: Any, root: str, full: str) -> str:
     return text
 
 
-def _is_dir_attr(attrs: Any) -> bool:
+def _mode(attrs: Any) -> int | None:
     permissions = getattr(attrs, "permissions", None)
-    if permissions is not None:
-        return stat.S_ISDIR(permissions)
-    return int(getattr(attrs, "type", 0) or 0) == 2
+    if isinstance(permissions, int):
+        return permissions
+    return None
+
+
+def _file_type(attrs: Any) -> int | None:
+    raw = getattr(attrs, "type", None)
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return None
+    return value
+
+
+def _is_dir_attr(attrs: Any) -> bool:
+    mode = _mode(attrs)
+    if mode is not None and stat.S_IFMT(mode):
+        return stat.S_ISDIR(mode)
+    return _file_type(attrs) == 2
+
+
+def _classify_entry(attrs: Any) -> str:
+    """Classify a readdir entry without following links.
+
+    readdir attributes come from lstat. Calling stat() on a symlink follows
+    it, and one looping or wedged target used to fail or stall the whole
+    folder, which left the gallery on "Loading library…".
+    """
+    if attrs is None:
+        return _KIND_UNKNOWN
+    mode = _mode(attrs)
+    if mode is not None and stat.S_IFMT(mode):
+        if stat.S_ISLNK(mode) or stat.S_ISFIFO(mode) or stat.S_ISSOCK(mode):
+            return _KIND_SKIP
+        if stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+            return _KIND_SKIP
+        if stat.S_ISDIR(mode):
+            return _KIND_DIR
+        if stat.S_ISREG(mode):
+            return _KIND_FILE
+    kind = _file_type(attrs)
+    if kind == 2:
+        return _KIND_DIR
+    if kind == 1:
+        return _KIND_FILE
+    if kind in _SKIP_FILE_TYPES:
+        return _KIND_SKIP
+    return _KIND_UNKNOWN
+
+
+async def _await_sftp(awaitable: Any, timeout: float = _SFTP_CALL_TIMEOUT) -> Any:
+    return await asyncio.wait_for(awaitable, timeout)
 
 
 async def _list_sftp_conn(sftp: Any, root: str, rel: str) -> list[tuple[str, bool, str]]:
@@ -266,7 +332,9 @@ async def _list_sftp_conn(sftp: Any, root: str, rel: str) -> list[tuple[str, boo
     full = join_remote(root, safe)
     real_dir = await _real_inside(sftp, root, full)
     try:
-        attr = await sftp.stat(real_dir)
+        attr = await _await_sftp(sftp.stat(real_dir))
+    except TimeoutError as exc:
+        raise APIError(502, "io_error", "sftp request timed out") from exc
     except asyncssh.SFTPNoSuchFile as exc:
         raise APIError(404, "not_found", "directory not found") from exc
     except (asyncssh.Error, OSError) as exc:
@@ -274,7 +342,9 @@ async def _list_sftp_conn(sftp: Any, root: str, rel: str) -> list[tuple[str, boo
     if not _is_dir_attr(attr):
         raise APIError(400, "validation", "not a directory")
     try:
-        entries = await sftp.readdir(real_dir)
+        entries = await _await_sftp(sftp.readdir(real_dir))
+    except TimeoutError as exc:
+        raise APIError(502, "io_error", "sftp request timed out") from exc
     except asyncssh.SFTPNoSuchFile as exc:
         raise APIError(404, "not_found", "directory not found") from exc
     except (asyncssh.Error, OSError) as exc:
@@ -287,22 +357,66 @@ async def _list_sftp_conn(sftp: Any, root: str, rel: str) -> list[tuple[str, boo
             name = name.decode("utf-8", "surrogateescape")
         if name in {".", ".."} or "/" in name or "\\" in name or "\x00" in name:
             continue
+        kind = _classify_entry(getattr(entry, "attrs", None))
+        if kind == _KIND_SKIP:
+            continue
         child_full = posixpath.join(real_dir, name)
         try:
-            real_child = await _real_inside(sftp, root, child_full)
-            child_attr = await sftp.stat(real_child)
-        except PathRejected:
+            await _await_sftp(_real_inside(sftp, root, child_full))
+            if kind == _KIND_UNKNOWN:
+                child_attr = await _await_sftp(sftp.stat(child_full))
+                if _classify_entry(child_attr) == _KIND_SKIP:
+                    continue
+                is_dir = _is_dir_attr(child_attr)
+            else:
+                is_dir = kind == _KIND_DIR
+        except (PathRejected, APIError, TimeoutError, asyncssh.Error, OSError):
             continue
-        except APIError:
-            continue
-        is_dir = _is_dir_attr(child_attr)
         if not is_dir and not is_still_name(name):
             continue
         items.append((name, is_dir, child_rel(safe, name)))
     return items
 
 
+async def _inspect_sftp_conn(
+    sftp: Any,
+    root: str,
+    rel: str,
+) -> list[Listed]:
+    children = await _list_sftp_conn(sftp, root, rel)
+    listed: list[Listed] = []
+    for name, is_dir, rel_path in children:
+        count = None
+        if is_dir:
+            try:
+                nested = await _list_sftp_conn(sftp, root, rel_path)
+            except APIError:
+                count = 0
+            else:
+                count = sum(1 for _name, nested_dir, _rel in nested if not nested_dir)
+        listed.append((name, is_dir, rel_path, count))
+    return listed
+
+
 async def _inspect_sftp(
+    source: sqlite3.Row,
+    rel: str,
+    fernet: Fernet,
+    db: Database,
+) -> list[Listed]:
+    try:
+        return await asyncio.wait_for(
+            _inspect_sftp_limited(source, rel, fernet, db),
+            _SFTP_LIST_TIMEOUT,
+        )
+    except APIError:
+        raise
+    except TimeoutError as exc:
+        logger.warning("sftp list timed out")
+        raise APIError(502, "io_error", "sftp request timed out") from exc
+
+
+async def _inspect_sftp_limited(
     source: sqlite3.Row,
     rel: str,
     fernet: Fernet,
@@ -313,22 +427,13 @@ async def _inspect_sftp(
     try:
         async with conn:
             async with conn.start_sftp_client() as sftp:
-                children = await _list_sftp_conn(sftp, root, rel)
-                listed: list[Listed] = []
-                for name, is_dir, rel_path in children:
-                    count = None
-                    if is_dir:
-                        try:
-                            nested = await _list_sftp_conn(sftp, root, rel_path)
-                        except APIError:
-                            count = 0
-                        else:
-                            count = sum(1 for _name, nested_dir, _rel in nested if not nested_dir)
-                    listed.append((name, is_dir, rel_path, count))
-                return listed
+                return await _inspect_sftp_conn(sftp, root, rel)
     except APIError:
         raise
-    except (asyncssh.Error, OSError, TimeoutError) as exc:
+    except TimeoutError as exc:
+        logger.warning("sftp list timed out")
+        raise APIError(502, "io_error", "sftp request timed out") from exc
+    except (asyncssh.Error, OSError) as exc:
         logger.warning("sftp list failed: %s", type(exc).__name__)
         raise APIError(502, "io_error", "sftp request failed") from exc
 
