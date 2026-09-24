@@ -2,7 +2,7 @@
 set -eu
 
 DATA_DIR="${SERAFRAME_DATA_DIR:-/data}"
-PORT="${SERAFRAME_PORT:-8080}"
+PORT="${SERAFRAME_PORT:-8081}"
 
 mkdir -p "$DATA_DIR"
 

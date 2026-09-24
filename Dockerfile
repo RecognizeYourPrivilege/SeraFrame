@@ -16,7 +16,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LC_ALL=C.UTF-8 \
     PATH="/opt/venv/bin:$PATH" \
     SERAFRAME_DATA_DIR=/data \
-    SERAFRAME_PORT=8080 \
+    SERAFRAME_PORT=8081 \
     SERAFRAME_SPA_DIR=/app/spa
 
 # Bookworm ships Python 3.11. Build CPython 3.12 from the upstream tarball.
@@ -71,6 +71,6 @@ RUN chmod 755 /usr/local/bin/seraframe-entrypoint \
 
 USER seraframe
 
-EXPOSE 8080
+EXPOSE 8081
 
 ENTRYPOINT ["seraframe-entrypoint"]
