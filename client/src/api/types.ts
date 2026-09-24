@@ -49,3 +49,30 @@ export type Ok = { ok: true };
 export type CsrfResponse = { csrfToken: string };
 
 export type MeResponse = { authenticated: true };
+
+export type Appearance = "light" | "dark";
+
+export type ChangePasswordBody = {
+  currentPassword: string;
+  newPassword: string;
+};
+
+export type Session = {
+  id: string;
+  createdAt: string;
+  lastSeenAt: string;
+  userAgent: string | null;
+  ip: string | null;
+  current: boolean;
+};
+
+/** Server store. Feature toggles are not part of this object. */
+export type ServerPrefs = {
+  appearance: Appearance | null;
+  firstRunAppearanceDone: boolean;
+};
+
+export type ServerPrefsPatch = {
+  appearance?: Appearance;
+  firstRunAppearanceDone?: true;
+};

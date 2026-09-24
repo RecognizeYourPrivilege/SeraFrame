@@ -30,11 +30,14 @@ def csrf_headers(client: TestClient) -> dict[str, str]:
     return {"X-CSRF-Token": token}
 
 
-def login(client: TestClient, password: str = PASSWORD):
+def login(client: TestClient, password: str = PASSWORD, headers: dict[str, str] | None = None):
+    merged = csrf_headers(client)
+    if headers:
+        merged.update(headers)
     return client.post(
         "/api/auth/login",
         json={"password": password},
-        headers=csrf_headers(client),
+        headers=merged,
     )
 
 
