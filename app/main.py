@@ -10,6 +10,7 @@ import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import quote, urlsplit
@@ -17,7 +18,7 @@ from urllib.parse import quote, urlsplit
 from fastapi import Body, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import (
@@ -110,6 +111,11 @@ def _spa_response(rel: str) -> Response:
         return FileResponse(index, headers={"Cache-Control": "no-cache"})
     return HTMLResponse(_INDEX_HTML)
 
+_PASSWORD_MIN_LEN = 1
+_PASSWORD_MAX_LEN = 1024
+_USER_AGENT_MAX_LEN = 512
+_IP_MAX_LEN = 64
+
 _CONTENT_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -121,6 +127,30 @@ _CONTENT_TYPES = {
 
 class LoginBody(BaseModel):
     password: str
+
+
+class ChangePasswordBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    currentPassword: str
+    newPassword: str
+
+
+class PrefsIn(BaseModel):
+    """Partial admin appearance update. Feature toggles are not accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+    appearance: Literal["light", "dark"] | None = None
+    firstRunAppearanceDone: Literal[True] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_explicit_null(cls, data: object) -> object:
+        if isinstance(data, dict):
+            if "appearance" in data and data["appearance"] is None:
+                raise ValueError("appearance cannot be null")
+            if "firstRunAppearanceDone" in data and data["firstRunAppearanceDone"] is None:
+                raise ValueError("firstRunAppearanceDone cannot be null")
+        return data
 
 
 class LocalSourceIn(BaseModel):
@@ -239,7 +269,12 @@ def create_app() -> FastAPI:
 
     @app.post("/api/auth/login")
     def login(request: Request, body: LoginBody) -> JSONResponse:
-        response_token, failure = _attempt_login(request.app.state.db, body.password)
+        response_token, failure = _attempt_login(
+            request.app.state.db,
+            body.password,
+            user_agent=_clip_text(request.headers.get("user-agent"), _USER_AGENT_MAX_LEN),
+            ip=_client_ip(request),
+        )
         if failure is not None:
             raise failure
         assert response_token is not None
@@ -275,6 +310,50 @@ def create_app() -> FastAPI:
     def me(request: Request) -> dict[str, bool]:
         _require_session(request)
         return {"authenticated": True}
+
+    @app.post("/api/auth/change-password")
+    def change_password(request: Request, body: ChangePasswordBody) -> JSONResponse:
+        token = _require_session(request)
+        _change_password(request.app.state.db, token, body.currentPassword, body.newPassword)
+        return JSONResponse({"ok": True}, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/auth/sessions")
+    def list_sessions(request: Request) -> JSONResponse:
+        token = _require_session(request)
+        request.app.state.db.purge_expired_sessions()
+        rows = request.app.state.db.fetchall(
+            """
+            SELECT id, token, created_at, last_seen_at, user_agent, ip
+            FROM sessions
+            WHERE expires_at > ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (time.time(),),
+        )
+        return JSONResponse(
+            {"sessions": [_public_session(row, token) for row in rows]},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.delete("/api/auth/sessions/{session_id}")
+    def revoke_session(request: Request, session_id: str) -> JSONResponse:
+        token = _require_session(request)
+        _revoke_session(request.app.state.db, token, session_id)
+        return JSONResponse({"ok": True}, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/prefs")
+    def get_prefs(request: Request) -> JSONResponse:
+        _require_session(request)
+        return JSONResponse(
+            _public_prefs(_admin_prefs(request.app.state.db)),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.put("/api/prefs")
+    def put_prefs(request: Request, body: PrefsIn) -> JSONResponse:
+        _require_session(request)
+        stored = _update_prefs(request.app.state.db, body)
+        return JSONResponse(stored, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/sources")
     def list_sources(request: Request) -> dict[str, list]:
@@ -467,7 +546,13 @@ def create_app() -> FastAPI:
     return app
 
 
-def _attempt_login(db: Database, password: str) -> tuple[str | None, APIError | None]:
+def _attempt_login(
+    db: Database,
+    password: str,
+    *,
+    user_agent: str | None,
+    ip: str | None,
+) -> tuple[str | None, APIError | None]:
     now = time.time()
     failure: APIError | None = None
     token: str | None = None
@@ -493,7 +578,7 @@ def _attempt_login(db: Database, password: str) -> tuple[str | None, APIError | 
                     attempts = 0
                 accepted = False
                 replacement_hash = None
-                if isinstance(password, str) and 1 <= len(password) <= 1024:
+                if _password_in_range(password):
                     accepted = verify_password(row["password_hash"], password)
                     if accepted and password_needs_rehash(row["password_hash"]):
                         replacement_hash = hash_password(password)
@@ -528,28 +613,209 @@ def _attempt_login(db: Database, password: str) -> tuple[str | None, APIError | 
                     )
                     token = secrets.token_urlsafe(32)
                     conn.execute(
-                        "INSERT INTO sessions (token, created_at, expires_at) VALUES (?, ?, ?)",
-                        (token, now, now + SESSION_TTL_SECONDS),
+                        """
+                        INSERT INTO sessions (
+                            token, id, created_at, last_seen_at, expires_at, user_agent, ip
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            token,
+                            str(uuid.uuid4()),
+                            now,
+                            now,
+                            now + SESSION_TTL_SECONDS,
+                            user_agent,
+                            ip,
+                        ),
                     )
                     conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
     return token, failure
 
 
-def _require_session(request: Request) -> None:
+def _require_session(request: Request) -> str:
     token = request.cookies.get(SESSION_COOKIE, "")
-    if not token or not _session_live(request.app.state.db, token):
+    if not token or not _touch_session(request, token):
         raise APIError(401, "unauthorized", "authentication required")
+    return token
 
 
-def _session_live(db: Database, token: str) -> bool:
-    row = db.fetchone("SELECT expires_at FROM sessions WHERE token = ?", (token,))
-    if row is None:
-        return False
-    if float(row["expires_at"]) <= time.time():
-        with db.transaction() as conn:
+def _touch_session(request: Request, token: str) -> bool:
+    """Refresh last-seen. User-Agent and IP stay as captured at login when set."""
+    now = time.time()
+    db: Database = request.app.state.db
+    with db.transaction() as conn:
+        row = conn.execute(
+            "SELECT expires_at FROM sessions WHERE token = ?",
+            (token,),
+        ).fetchone()
+        if row is None:
+            return False
+        if float(row["expires_at"]) <= now:
             conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
-        return False
+            return False
+        conn.execute(
+            """
+            UPDATE sessions
+            SET last_seen_at = ?,
+                user_agent = COALESCE(user_agent, ?),
+                ip = COALESCE(ip, ?)
+            WHERE token = ?
+            """,
+            (
+                now,
+                _clip_text(request.headers.get("user-agent"), _USER_AGENT_MAX_LEN),
+                _client_ip(request),
+                token,
+            ),
+        )
     return True
+
+
+def _change_password(db: Database, token: str, current_password: str, new_password: str) -> None:
+    now = time.time()
+    with db.transaction() as conn:
+        session = conn.execute(
+            "SELECT expires_at FROM sessions WHERE token = ?",
+            (token,),
+        ).fetchone()
+        if session is None or float(session["expires_at"]) <= now:
+            raise APIError(401, "unauthorized", "authentication required")
+        admin = conn.execute(
+            "SELECT password_hash FROM admin WHERE id = 1"
+        ).fetchone()
+        if admin is None:
+            raise APIError(500, "io_error", "admin is not initialized")
+        if not (
+            _password_in_range(current_password)
+            and verify_password(admin["password_hash"], current_password)
+        ):
+            raise APIError(401, "unauthorized", "current password is incorrect")
+        if not _password_in_range(new_password):
+            raise APIError(
+                400,
+                "validation",
+                f"new password must be {_PASSWORD_MIN_LEN} to {_PASSWORD_MAX_LEN} characters",
+            )
+        conn.execute(
+            """
+            UPDATE admin
+            SET password_hash = ?, failed_attempts = 0, locked_until = NULL
+            WHERE id = 1
+            """,
+            (hash_password(new_password),),
+        )
+        conn.execute("DELETE FROM sessions WHERE token != ?", (token,))
+
+
+def _revoke_session(db: Database, current_token: str, session_id: str) -> None:
+    if not session_id or len(session_id) > 128 or "\x00" in session_id:
+        raise APIError(404, "not_found", "session not found")
+    db.purge_expired_sessions()
+    with db.transaction() as conn:
+        current = conn.execute(
+            "SELECT id FROM sessions WHERE token = ?",
+            (current_token,),
+        ).fetchone()
+        if current is None:
+            raise APIError(401, "unauthorized", "authentication required")
+        if current["id"] == session_id:
+            raise APIError(400, "validation", "cannot revoke the current session")
+        row = conn.execute(
+            "SELECT id FROM sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            raise APIError(404, "not_found", "session not found")
+        conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+
+def _admin_prefs(db: Database):
+    row = db.fetchone(
+        "SELECT appearance, first_run_appearance_done FROM admin WHERE id = 1"
+    )
+    if row is None:
+        raise APIError(500, "io_error", "admin is not initialized")
+    return row
+
+
+def _public_prefs(row) -> dict:
+    appearance = row["appearance"] if row["appearance"] in ("light", "dark") else None
+    return {
+        "appearance": appearance,
+        "firstRunAppearanceDone": bool(row["first_run_appearance_done"]),
+    }
+
+
+def _update_prefs(db: Database, body: PrefsIn) -> dict:
+    if body.appearance is None and body.firstRunAppearanceDone is None:
+        raise APIError(400, "validation", "no preference fields to update")
+    with db.transaction() as conn:
+        row = conn.execute(
+            "SELECT appearance, first_run_appearance_done FROM admin WHERE id = 1"
+        ).fetchone()
+        if row is None:
+            raise APIError(500, "io_error", "admin is not initialized")
+        appearance = row["appearance"] if row["appearance"] in ("light", "dark") else None
+        done = bool(row["first_run_appearance_done"])
+        if body.appearance is not None:
+            appearance = body.appearance
+        if body.firstRunAppearanceDone is True:
+            if appearance not in ("light", "dark"):
+                raise APIError(400, "validation", "appearance is required to finish first run")
+            done = True
+        conn.execute(
+            """
+            UPDATE admin
+            SET appearance = ?, first_run_appearance_done = ?
+            WHERE id = 1
+            """,
+            (appearance, 1 if done else 0),
+        )
+    return {"appearance": appearance, "firstRunAppearanceDone": done}
+
+
+def _public_session(row, current_token: str) -> dict:
+    return {
+        "id": row["id"],
+        "createdAt": _utc_iso(row["created_at"]),
+        "lastSeenAt": _utc_iso(
+            row["last_seen_at"] if row["last_seen_at"] is not None else row["created_at"]
+        ),
+        "userAgent": row["user_agent"],
+        "ip": row["ip"],
+        "current": row["token"] == current_token,
+    }
+
+
+def _password_in_range(password: str) -> bool:
+    return isinstance(password, str) and _PASSWORD_MIN_LEN <= len(password) <= _PASSWORD_MAX_LEN
+
+
+def _clip_text(value: str | None, limit: int) -> str | None:
+    if not value:
+        return None
+    cleaned = value.replace("\x00", "").strip()
+    if not cleaned:
+        return None
+    return cleaned[:limit]
+
+
+def _client_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("x-forwarded-for")
+    host = request.client.host if request.client is not None else None
+    return _request_ip(host, forwarded, request.app.state.settings.trust_proxy)
+
+
+def _request_ip(host: str | None, forwarded_for: str | None, trust_proxy: bool) -> str | None:
+    if trust_proxy and forwarded_for:
+        clipped = _clip_text(forwarded_for.split(",")[0], _IP_MAX_LEN)
+        if clipped:
+            return clipped
+    return _clip_text(host, _IP_MAX_LEN)
+
+
+def _utc_iso(timestamp: float) -> str:
+    return datetime.fromtimestamp(float(timestamp), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _set_csrf_cookie(response: JSONResponse, settings: Settings, token: str) -> None:
