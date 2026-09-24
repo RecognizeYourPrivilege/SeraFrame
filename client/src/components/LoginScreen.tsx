@@ -27,8 +27,8 @@ export function LoginScreen() {
   return (
     <main className="login" id="main">
       <div className="login-card">
-        <p className="mark">
-          <span className="mark-frame" aria-hidden="true" />
+        <p className="login-brand">
+          <img src="/brand/seraframe-icon-locked.png" alt="" width={72} height={72} />
           SeraFrame
         </p>
         <h1>Sign in</h1>
@@ -60,7 +60,7 @@ export function LoginScreen() {
         </form>
         {mocksOn ? (
           <p className="hint">
-            Demo password <code>seraframe-demo</code>. Reload clears the mock session.
+            Mock password <code>seraframe-demo</code>. Reload clears the mock session.
           </p>
         ) : null}
       </div>

@@ -3,14 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
+    <script>
+      (function () {
+        var theme = "dark";
+        try {
+          var raw = localStorage.getItem("seraframe.prefs");
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && parsed.theme === "light") theme = "light";
+          }
+        } catch (e) {}
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
     <meta name="robots" content="noindex" />
     <meta
       name="description"
       content="SeraFrame — private ComfyUI stills browser and servers panel."
     />
     <title>SeraFrame</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/brand/seraframe-icon-256.png" type="image/png" />
   </head>
   <body>
     <div id="root"></div>

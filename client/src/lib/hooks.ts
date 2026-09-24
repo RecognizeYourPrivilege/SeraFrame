@@ -13,18 +13,3 @@ export function useMediaQuery(query: string): boolean {
 
   return matches;
 }
-
-export type AppView = "gallery" | "servers";
-
-export function useHashView(): AppView {
-  const read = (): AppView => (window.location.hash === "#/servers" ? "servers" : "gallery");
-  const [view, setView] = useState<AppView>(read);
-
-  useEffect(() => {
-    const onHash = () => setView(read());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
-
-  return view;
-}
