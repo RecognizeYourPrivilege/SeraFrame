@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Server } from "../api/types";
 
-type FrameState = "loading" | "ready" | "blocked";
+type FrameState = "loading" | "ready" | "slow" | "blocked";
 
 const SANDBOX = [
   "allow-scripts",
@@ -30,7 +30,7 @@ export function ServerFrame({ server }: ServerFrameProps) {
   useEffect(() => {
     setState("loading");
     const timeout = window.setTimeout(() => {
-      setState((current) => (current === "loading" ? "blocked" : current));
+      setState((current) => (current === "loading" ? "slow" : current));
     }, 8000);
     return () => {
       window.clearTimeout(timeout);
@@ -73,8 +73,8 @@ export function ServerFrame({ server }: ServerFrameProps) {
         <div className="frame-fallback" role="status">
           <h3>This page can’t be shown in a frame</h3>
           <p>
-            {server.name} blocked embedding, or the frame never finished loading. SeraFrame does not proxy
-            servers.
+            {server.name} refused to be embedded. SeraFrame does not proxy servers. Open externally is also in
+            the bar above.
           </p>
           <a className="btn primary" href={server.url} target="_blank" rel="noopener noreferrer">
             Open externally
@@ -85,6 +85,12 @@ export function ServerFrame({ server }: ServerFrameProps) {
           {state === "loading" ? (
             <p className="frame-loading" role="status">
               Loading frame…
+            </p>
+          ) : null}
+          {state === "slow" ? (
+            <p className="frame-note" role="status">
+              Still loading. A slow response is not a blocked frame. If the page stays blank, use Open
+              externally.
             </p>
           ) : null}
           <iframe

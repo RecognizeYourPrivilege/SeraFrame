@@ -10,3 +10,5 @@ data
 tests
 README.md
 INFRASTRUCTURE_LEDGER.md
+**/node_modules
+client/dist

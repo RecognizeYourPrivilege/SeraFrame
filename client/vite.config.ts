@@ -19,4 +19,9 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 4173,
   },
+  build: {
+    // Stable output consumed by the runtime image (`COPY --from=spa .../dist`).
+    outDir: "dist",
+    emptyOutDir: true,
+  },
 });

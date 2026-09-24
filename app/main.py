@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import posixpath
 import secrets
 import time
@@ -15,7 +16,7 @@ from urllib.parse import quote, urlsplit
 
 from fastapi import Body, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -64,6 +65,50 @@ _INDEX_HTML = """<!DOCTYPE html>
 </body>
 </html>
 """
+
+
+def _spa_root() -> Path:
+    configured = os.environ.get("SERAFRAME_SPA_DIR", "").strip()
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parent.parent / "spa"
+
+
+def _spa_asset(root: Path, rel: str) -> Path | None:
+    if not rel or "\x00" in rel or "\\" in rel or rel.startswith("/"):
+        return None
+    parts = rel.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return None
+    try:
+        root_real = root.resolve(strict=False)
+        candidate = (root_real.joinpath(*parts)).resolve(strict=False)
+        candidate.relative_to(root_real)
+    except (OSError, ValueError):
+        return None
+    if candidate.is_file():
+        return candidate
+    return None
+
+
+def _spa_response(rel: str) -> Response:
+    """Serve the built client. `/api/*` is never handled here."""
+    rel = rel.lstrip("/")
+    if rel == "api" or rel.startswith("api/"):
+        return json_error(404, "not_found", "not found")
+    root = _spa_root()
+    index = root / "index.html"
+    asset = _spa_asset(root, rel) if rel else None
+    if asset is not None:
+        return FileResponse(asset)
+    has_suffix = bool(rel) and bool(posixpath.splitext(rel)[1])
+    if index.is_file() and not has_suffix:
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
+    if has_suffix:
+        return json_error(404, "not_found", "not found")
+    if index.is_file():
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
+    return HTMLResponse(_INDEX_HTML)
 
 _CONTENT_TYPES = {
     ".jpg": "image/jpeg",
@@ -181,9 +226,9 @@ def create_app() -> FastAPI:
                 return json_error(403, "csrf", "csrf token missing or invalid")
         return await call_next(request)
 
-    @app.get("/", response_class=HTMLResponse)
-    def index() -> HTMLResponse:
-        return HTMLResponse(_INDEX_HTML)
+    @app.get("/", response_model=None)
+    def index() -> Response:
+        return _spa_response("")
 
     @app.get("/api/auth/csrf")
     def issue_csrf(request: Request) -> JSONResponse:
@@ -414,6 +459,10 @@ def create_app() -> FastAPI:
         if row is None:
             raise APIError(404, "not_found", "server not found")
         return {"ok": True}
+
+    @app.get("/{full_path:path}", response_model=None)
+    def spa_fallback(full_path: str) -> Response:
+        return _spa_response(full_path)
 
     return app
 
