@@ -1,12 +1,15 @@
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/LoginScreen";
+import { PrefsProvider } from "./lib/prefs";
 
 export function App() {
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <PrefsProvider>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </PrefsProvider>
   );
 }
 
