@@ -167,4 +167,83 @@ describe("image feed and lightbox", () => {
     });
     expect(open).toHaveBeenCalledWith("/full/2", "_blank", NEW_WINDOW_FEATURES);
   });
+
+  it("pinch-zooms the image, and still swipes and closes from the scrim at fitted size", async () => {
+    await render(0);
+    const image = document.querySelector(".lightbox-stage img");
+    const stage = document.querySelector(".lightbox-stage");
+    if (!(image instanceof HTMLImageElement) || !(stage instanceof HTMLElement)) throw new Error("missing image");
+
+    await act(async () => {
+      touch(image, "touchstart", [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 100, y: 0 },
+      ]);
+      touch(image, "touchmove", [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 200, y: 0 },
+      ]);
+      touch(image, "touchend", [], [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 200, y: 0 },
+      ]);
+    });
+    expect(image.style.transform).toBe("scale(2)");
+    expect(document.body.textContent).toContain("1 / 3");
+
+    await act(async () => {
+      touch(image, "touchstart", [{ id: 1, x: 200, y: 40 }]);
+      touch(image, "touchmove", [{ id: 1, x: 80, y: 40 }]);
+      touch(image, "touchend", [], [{ id: 1, x: 80, y: 40 }]);
+    });
+    expect(document.body.textContent).toContain("1 / 3");
+    expect(image.style.transform).toContain("scale(2)");
+
+    await act(async () => {
+      touch(image, "touchstart", [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 200, y: 0 },
+      ]);
+      touch(image, "touchmove", [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 100, y: 0 },
+      ]);
+      touch(image, "touchend", [], [{ id: 2, x: 100, y: 0 }]);
+    });
+    expect(image.style.transform).toBe("");
+    expect(document.body.textContent).toContain("1 / 3");
+
+    await act(async () => {
+      touch(image, "touchstart", [{ id: 1, x: 180, y: 80 }]);
+      touch(image, "touchend", [], [{ id: 1, x: 40, y: 90 }]);
+    });
+    expect(document.body.textContent).toContain("2 / 3");
+    expect(document.querySelector(".lightbox-stage img")?.getAttribute("style")).toBeNull();
+
+    const scrim = document.querySelector(".lightbox-scrim");
+    if (!(scrim instanceof HTMLButtonElement)) throw new Error("missing scrim");
+    await act(async () => {
+      scrim.click();
+    });
+    expect(document.querySelector("[role='dialog']")).toBeNull();
+    expect(document.querySelector(".image-feed")).not.toBeNull();
+  });
 });
+
+function touch(
+  target: Element,
+  type: "touchstart" | "touchmove" | "touchend",
+  points: { id: number; x: number; y: number }[],
+  changed = points,
+) {
+  const toTouch = (point: { id: number; x: number; y: number }) =>
+    new Touch({ identifier: point.id, target, clientX: point.x, clientY: point.y });
+  target.dispatchEvent(
+    new TouchEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      touches: points.map(toTouch),
+      changedTouches: changed.map(toTouch),
+    }),
+  );
+}

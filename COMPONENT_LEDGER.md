@@ -30,7 +30,8 @@ FRONT lives in `client/`. `npm run build` writes `client/dist`. The Docker image
 | `AddSourceDialog.tsx` | `client/src/components/AddSourceDialog.tsx` | Local vs SFTP explanation, `/opt/comfyui_*` suggestions | `client.ts`, `forms.ts` |
 | `ThumbGrid.tsx` | `client/src/components/ThumbGrid.tsx` | Lazy `thumbUrl` only. Activate opens the overlay. Arrow keys do not move the sequence. Cover, or contain when Show full photo is on. Optional blur | `types.ts` |
 | `ImageFeed.tsx` | `client/src/components/ImageFeed.tsx` | Bottom feed bar (z-index 99). Activate a thumb to open the overlay. Same component for a later server feed | `feed.ts` |
-| `Lightbox.tsx` | `client/src/components/Lightbox.tsx` | Fullscreen overlay (z-index 1001). Overlay-only keys, stop at ends, new tab and new window | `feed.ts` |
+| `Lightbox.tsx` | `client/src/components/Lightbox.tsx` | Fullscreen overlay (z-index 1001). Overlay-only keys, stop at ends, new tab and new window. Pinch scales the image; a one-finger swipe steps only at the fitted size | `feed.ts`, `lightboxZoom.ts` |
+| `lightboxZoom.ts` | `client/src/lib/lightboxZoom.ts` | Pinch scale, swipe-versus-zoom decision, pan limits | — |
 
 Feed thumbs use `thumbUrl`. `fullUrl` is requested by the overlay image and by Open in new tab / Open in new window.
 
