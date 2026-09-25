@@ -1,93 +1,82 @@
-import { useEffect, useId, useRef, useState, type TouchEvent } from "react";
+import { useEffect, useId, useRef, type TouchEvent } from "react";
 import { createPortal } from "react-dom";
-import type { Still } from "../api/types";
+import {
+  isEditableKeyTarget,
+  openImageInNewWindow,
+  overlayKeyAction,
+  stepIndex,
+  type FeedItem,
+} from "../lib/feed";
 
 type LightboxProps = {
-  stills: Still[];
+  items: FeedItem[];
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
+  /** When false the key handler no-ops. Unmounting the overlay does the same. */
+  open?: boolean;
   fit?: "cover" | "contain";
-  blurThumbs?: boolean;
 };
 
-export function Lightbox({ stills, index, onIndex, onClose, fit = "contain", blurThumbs = false }: LightboxProps) {
-  const still = stills[index];
+export function Lightbox({ items, index, onIndex, onClose, open = true, fit = "contain" }: LightboxProps) {
+  const item = items[index];
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  const stripRef = useRef<HTMLUListElement>(null);
-  const [stripOpen, setStripOpen] = useState(false);
-  const stripOpenRef = useRef(false);
-  stripOpenRef.current = stripOpen;
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const openRef = useRef(open);
+  const indexRef = useRef(index);
+  const lengthRef = useRef(items.length);
+  const onIndexRef = useRef(onIndex);
   const onCloseRef = useRef(onClose);
+  openRef.current = open;
+  indexRef.current = index;
+  lengthRef.current = items.length;
+  onIndexRef.current = onIndex;
   onCloseRef.current = onClose;
 
   useEffect(() => {
-    setLoaded(false);
-    setFailed(false);
-  }, [still?.sourceId, still?.relPath]);
-
-  useEffect(() => {
-    if (!stripOpen) return;
-    const current = stripRef.current?.querySelector<HTMLElement>('[aria-current="true"]');
-    current?.scrollIntoView({ inline: "center", block: "nearest" });
-  }, [stripOpen, index]);
-
-  const indexRef = useRef(index);
-  const lengthRef = useRef(stills.length);
-  const onIndexRef = useRef(onIndex);
-  indexRef.current = index;
-  lengthRef.current = stills.length;
-  onIndexRef.current = onIndex;
-
-  useEffect(() => {
+    if (!open) return;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const root = document.getElementById("root");
     if (root) root.inert = true;
     panelRef.current?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-
-    const onKey = (event: KeyboardEvent) => {
-      const current = indexRef.current;
-      const length = lengthRef.current;
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        onIndexRef.current(Math.max(0, current - 1));
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        onIndexRef.current(Math.min(length - 1, current + 1));
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setStripOpen(true);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        if (stripOpenRef.current) {
-          setStripOpen(false);
-          return;
-        }
-        onCloseRef.current();
-      } else if (event.key === "Tab") {
-        trapTab(event, panelRef.current);
-      }
-    };
-
-    document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previousOverflow;
       if (root) root.inert = false;
       previouslyFocused?.focus();
     };
+  }, [open]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!openRef.current) return;
+      if (isEditableKeyTarget(event.target)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const action = overlayKeyAction(event.key, true);
+      if (!action) return;
+      event.preventDefault();
+      if (action === "close") {
+        onCloseRef.current();
+        return;
+      }
+      const delta = action === "prev" ? -1 : 1;
+      const next = stepIndex(indexRef.current, lengthRef.current, delta);
+      if (next !== indexRef.current) onIndexRef.current(next);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  if (!still) return null;
+  if (!open || !item) return null;
+
+  const atStart = index <= 0;
+  const atEnd = index >= items.length - 1;
 
   function step(delta: number) {
-    onIndex(Math.max(0, Math.min(stills.length - 1, index + delta)));
+    const next = stepIndex(index, items.length, delta);
+    if (next !== index) onIndex(next);
   }
 
   function onTouchStart(event: TouchEvent) {
@@ -111,92 +100,59 @@ export function Lightbox({ stills, index, onIndex, onClose, fit = "contain", blu
     <div
       ref={panelRef}
       className={fit === "contain" ? "lightbox is-contain" : "lightbox is-cover"}
+      style={{ zIndex: 1001 }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key === "Tab") trapTab(event.nativeEvent, panelRef.current);
+      }}
     >
-      <div className="lightbox-top">
-        <h2 id={titleId}>{still.name}</h2>
-        <button type="button" className="btn" onClick={onClose}>
+      <button type="button" className="lightbox-scrim" aria-label="Close preview" tabIndex={-1} onClick={onClose} />
+      <div className="lightbox-ui">
+        <button type="button" className="btn lightbox-close" onClick={onClose}>
           Close
         </button>
-      </div>
-      <div className="lightbox-stage" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        {!loaded && !failed ? (
-          <img className={blurThumbs ? "placeholder is-blurred" : "placeholder"} src={still.thumbUrl} alt="" />
-        ) : null}
-        {failed ? (
-          <p className="frame-fallback" role="alert">
-            Full image failed to load.
-          </p>
-        ) : (
-          <img
-            className="full"
-            src={still.fullUrl}
-            alt={still.name}
-            decoding="async"
-            fetchPriority="high"
-            draggable={false}
-            onLoad={() => setLoaded(true)}
-            onError={() => setFailed(true)}
-          />
+        {atStart ? null : (
+          <button type="button" className="icon-btn lightbox-chevron is-prev" aria-label="Previous image" onClick={() => step(-1)}>
+            <ChevronIcon direction="prev" />
+          </button>
         )}
+        {atEnd ? null : (
+          <button type="button" className="icon-btn lightbox-chevron is-next" aria-label="Next image" onClick={() => step(1)}>
+            <ChevronIcon direction="next" />
+          </button>
+        )}
+        <div className="lightbox-stage" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <img className="full" src={item.fullUrl} alt={item.name} decoding="async" draggable={false} />
+        </div>
+        <div className="lightbox-bar">
+          <h2 id={titleId} className="lightbox-title">
+            {item.name}
+          </h2>
+          <p className="pos">
+            {index + 1} / {items.length}
+          </p>
+          <a className="btn" href={item.fullUrl} target="_blank" rel="noopener noreferrer">
+            Open in new tab
+          </a>
+          <button type="button" className="btn" onClick={() => openImageInNewWindow(item.fullUrl)}>
+            Open in new window
+          </button>
+        </div>
       </div>
-      {stripOpen ? (
-        <ul id="filmstrip" ref={stripRef} className="filmstrip" aria-label="Stills in this folder">
-          <li>
-            <button type="button" className="btn" onClick={() => setStripOpen(false)}>
-              Close filmstrip
-            </button>
-          </li>
-          {stills.map((item, itemIndex) => (
-            <li key={`${item.sourceId}:${item.relPath}`}>
-              <button
-                type="button"
-                className="strip-thumb"
-                aria-current={itemIndex === index ? "true" : undefined}
-                aria-label={`Show ${item.name}`}
-                onClick={() => onIndex(itemIndex)}
-              >
-                <img
-                  className={blurThumbs ? "is-blurred" : undefined}
-                  src={item.thumbUrl}
-                  alt=""
-                  width={72}
-                  height={72}
-                  loading="lazy"
-                  decoding="async"
-                />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <div className="lightbox-bar">
-        <button type="button" className="btn" onClick={() => step(-1)} disabled={index === 0}>
-          Previous
-        </button>
-        <p className="pos">
-          {index + 1} of {stills.length}
-        </p>
-        <button type="button" className="btn" onClick={() => step(1)} disabled={index >= stills.length - 1}>
-          Next
-        </button>
-        <button
-          type="button"
-          className="btn primary"
-          aria-expanded={stripOpen}
-          aria-controls="filmstrip"
-          aria-keyshortcuts="ArrowUp"
-          onClick={() => setStripOpen((open) => !open)}
-        >
-          Filmstrip
-        </button>
-      </div>
-      <p className="lightbox-hint">Left and right move between stills. Up opens the filmstrip.</p>
     </div>,
     document.body,
+  );
+}
+
+function ChevronIcon({ direction }: { direction: "prev" | "next" }) {
+  const d = direction === "prev" ? "M14.5 5.5 8 12l6.5 6.5" : "M9.5 5.5 16 12l-6.5 6.5";
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -206,7 +162,7 @@ function trapTab(event: KeyboardEvent, panel: HTMLElement | null) {
     panel.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     ),
-  ).filter((el) => el.tabIndex >= 0);
+  ).filter((el) => el.tabIndex >= 0 && el.getAttribute("aria-label") !== "Close preview");
   const first = items[0];
   const last = items[items.length - 1];
   if (!first || !last) return;

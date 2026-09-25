@@ -19,6 +19,11 @@ type ServerFrameProps = {
   onConnectionChange: (connected: boolean) => void;
 };
 
+/** Session-local embed scale. Resets when this frame remounts. */
+const ZOOM_MIN = 50;
+const ZOOM_MAX = 200;
+const ZOOM_STEP = 25;
+
 /**
  * In-app embed. The toolbar (address, back, refresh, open externally) stays
  * visible while SeraFrame chrome is hidden. The iframe keeps its own origin
@@ -28,6 +33,7 @@ export function ServerFrame({ server, onLeave, onConnectionChange }: ServerFrame
   const [state, setState] = useState<FrameState>("loading");
   const [reloadKey, setReloadKey] = useState(0);
   const [address, setAddress] = useState(server.url);
+  const [zoomPercent, setZoomPercent] = useState(100);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const timers = useRef<number[]>([]);
   const onConnectionChangeRef = useRef(onConnectionChange);
@@ -95,6 +101,7 @@ export function ServerFrame({ server, onLeave, onConnectionChange }: ServerFrame
   }
 
   const external = /^https?:\/\//i.test(address) ? address : server.url;
+  const zoom = zoomPercent / 100;
 
   return (
     <section className="frame-shell" aria-label={`${server.name} embedded server`}>
@@ -104,6 +111,27 @@ export function ServerFrame({ server, onLeave, onConnectionChange }: ServerFrame
         </button>
         <button type="button" className="icon-btn" aria-label="Refresh" onClick={refresh}>
           <RefreshIcon />
+        </button>
+        <button
+          type="button"
+          className="btn embed-zoom"
+          aria-label="Zoom out"
+          disabled={zoomPercent <= ZOOM_MIN}
+          onClick={() => setZoomPercent((current) => Math.max(ZOOM_MIN, current - ZOOM_STEP))}
+        >
+          Zoom out
+        </button>
+        <p className="embed-zoom-label" aria-live="polite">
+          {zoomPercent}%
+        </p>
+        <button
+          type="button"
+          className="btn embed-zoom"
+          aria-label="Zoom in"
+          disabled={zoomPercent >= ZOOM_MAX}
+          onClick={() => setZoomPercent((current) => Math.min(ZOOM_MAX, current + ZOOM_STEP))}
+        >
+          Zoom in
         </button>
         <label className="embed-url">
           <span className="visually-hidden">Server address</span>
@@ -140,16 +168,26 @@ export function ServerFrame({ server, onLeave, onConnectionChange }: ServerFrame
               Still loading. A slow response is not a blocked frame. If the page stays blank, use Open externally.
             </p>
           ) : null}
-          <iframe
-            key={`${server.url}:${reloadKey}`}
-            ref={iframeRef}
-            title={`${server.name} (sandboxed)`}
-            src={server.url}
-            sandbox={SANDBOX}
-            referrerPolicy="no-referrer"
-            onLoad={onLoad}
-            onError={() => setState("blocked")}
-          />
+          <div
+            className="frame-zoom"
+            data-embed-zoom={zoomPercent}
+            style={{
+              width: `${10000 / zoomPercent}%`,
+              height: `${10000 / zoomPercent}%`,
+              transform: `scale(${zoom})`,
+            }}
+          >
+            <iframe
+              key={`${server.url}:${reloadKey}`}
+              ref={iframeRef}
+              title={`${server.name} (sandboxed)`}
+              src={server.url}
+              sandbox={SANDBOX}
+              referrerPolicy="no-referrer"
+              onLoad={onLoad}
+              onError={() => setState("blocked")}
+            />
+          </div>
         </div>
       )}
     </section>

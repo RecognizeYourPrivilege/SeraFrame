@@ -1,2 +1,2 @@
-/** Packaging stays on v0.1.0. Draft 2.1.3 does not bump semver. */
-export const APP_VERSION = "0.1.0";
+/** Current release. v0.2.0 is a new tag; do not move v0.1.0. */
+export const APP_VERSION = "0.2.0";

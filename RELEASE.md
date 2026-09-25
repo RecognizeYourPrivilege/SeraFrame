@@ -1,8 +1,8 @@
 # Release
 
-First proposed tag: **v0.1.0**.
+Current release: **v0.2.0**. This is a new tag. Do not move or replace **v0.1.0**.
 
-Pushing a `v*.*.*` tag (for example `v0.1.0`) runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml). That workflow builds this repo's `Dockerfile`, pushes it to GHCR, and opens a GitHub Release for the same tag.
+Pushing a `v*.*.*` tag (for example `v0.2.0`) runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml). That workflow builds this repo's `Dockerfile`, pushes it to GHCR, and opens a GitHub Release for the same tag. What changed in 0.2.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 Published image:
 
@@ -10,22 +10,22 @@ Published image:
 ghcr.io/recognizeyourprivilege/seraframe
 ```
 
-For tag `v0.1.0` the workflow also pushes `0.1.0`, `0.1`, and `latest`. Pre-release tags such as `v0.1.0-rc.1` are pushed under that tag name and do not move `latest`.
+For tag `v0.2.0` the workflow also pushes `0.2.0` and `0.2`. Pre-release tags such as `v0.2.0-rc.1` are pushed under that tag name. The previous release tag `v0.1.0` stays where it is.
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 Pull and run the published image:
 
 ```bash
-docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
+docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.2.0
 
 docker run --rm -p 18880:18880 \
   -e SERAFRAME_ADMIN_PASSWORD='change-me' \
   -v seraframe-data:/data \
-  ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
+  ghcr.io/recognizeyourprivilege/seraframe:v0.2.0
 ```
 
 Open `http://127.0.0.1:18880/` and sign in with that password. The image serves the client UI at `/`.
