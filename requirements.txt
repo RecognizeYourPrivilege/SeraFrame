@@ -4,3 +4,5 @@ argon2-cffi==25.1.0
 cryptography==46.0.7
 pillow==11.3.0
 asyncssh==2.23.1
+httpx==0.28.1
+websockets==14.2
