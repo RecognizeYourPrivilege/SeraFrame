@@ -11,11 +11,12 @@ FRONT lives in `client/`. `npm run build` writes `client/dist`. The Docker image
 | `AppearancePicker.tsx` | `client/src/components/AppearancePicker.tsx` | One-time light (Photos) / dark (Neon) picker. Continue sends `PUT /api/prefs` with `appearance` and `firstRunAppearanceDone: true` | `prefs.tsx`, `serverPrefs.tsx` |
 | `AuthProvider.tsx` | `client/src/auth/AuthProvider.tsx` | `GET /api/auth/me`, login, logout; `401` returns to login except a wrong current password | `client.ts` |
 | `LoginScreen.tsx` | `client/src/components/LoginScreen.tsx` | Password form, lockout message, demo hint | `AuthProvider.tsx` |
-| `AppShell.tsx` | `client/src/components/AppShell.tsx` | Library / For You / Albums, search, profile, idle chrome, Servers rail | `GalleryView.tsx`, `ServersRail.tsx`, `ProfileMenu.tsx`, `ServerFrame.tsx` |
+| `AppShell.tsx` | `client/src/components/AppShell.tsx` | Library / For You / Albums, search, profile, idle chrome, Servers rail. A phone server view uses the shared Mobile layout; desktop server routes still start immersive | `GalleryView.tsx`, `ServersRail.tsx`, `ProfileMenu.tsx`, `ServerFrame.tsx` |
 | `ProfileMenu.tsx` | `client/src/components/ProfileMenu.tsx` | Appearance `PUT`, local feature toggles, change password, session list/revoke, About, sign out | `prefs.tsx`, `serverPrefs.tsx`, `client.ts`, `AuthProvider.tsx` |
 | `ProfileButton.tsx` | `client/src/components/ProfileButton.tsx` | Locked ring icon. Top bar chip and floating button. Green badge when a server frame is ready | — |
 | `ServersRail.tsx` | `client/src/components/ServersRail.tsx` | Server list. Fully removed with the top bar after idle. Not a peek rail | `AddServerDialog.tsx` |
-| `prefs.tsx` | `client/src/lib/prefs.tsx` | Display cache for light/dark plus auto-hide, full photo, and blur. `localStorage` key `seraframe.prefs`. Feature toggles stay here and are never sent to the server. A saved theme does not finish first-run | — |
+| `prefs.tsx` | `client/src/lib/prefs.tsx` | Display cache for light/dark plus auto-hide, full photo, blur, and Mobile layout. `localStorage` key `seraframe.prefs`. Feature toggles stay here and are never sent to the server. A saved theme does not finish first-run. Mobile layout defaults to option 1 and is not reset by a server embed | — |
+| `feed.ts` | `client/src/lib/feed.ts` | Feed item shape, stop-at-ends stepping, overlay-only key map, new-window open | `types.ts` |
 | `serverPrefs.tsx` | `client/src/lib/serverPrefs.tsx` | After login, `GET /api/prefs`. Applies a stored appearance. `PUT` is only the picker finish or a later Appearance change | `client.ts`, `prefs.tsx` |
 | `Dialog.tsx` | `client/src/components/Dialog.tsx` | Modal, focus trap, Escape, portaled so the page can be `inert` | — |
 
@@ -23,21 +24,23 @@ FRONT lives in `client/`. `npm run build` writes `client/dist`. The Docker image
 
 | File | Path | Role | Depends on |
 | --- | --- | --- | --- |
-| `GalleryView.tsx` | `client/src/components/GalleryView.tsx` | Library album cards, For You, Albums, photo grid, viewer | `AlbumCard.tsx`, `ThumbGrid.tsx`, `Lightbox.tsx`, `AddSourceDialog.tsx` |
+| `GalleryView.tsx` | `client/src/components/GalleryView.tsx` | Library album cards, For You, Albums, photo grid, bottom feed, viewer | `AlbumCard.tsx`, `ThumbGrid.tsx`, `ImageFeed.tsx`, `Lightbox.tsx`, `AddSourceDialog.tsx` |
 | `AlbumCard.tsx` | `client/src/components/AlbumCard.tsx` | Album cover, title, photo count. Contain or cover from Show full photo | `route.ts` |
 | `SourceSidebar.tsx` | `client/src/components/SourceSidebar.tsx` | Folder tree kept in the repo. The mounted gallery uses album cards instead | `AddSourceDialog.tsx`, `Dialog.tsx`, `client.ts` |
 | `AddSourceDialog.tsx` | `client/src/components/AddSourceDialog.tsx` | Local vs SFTP explanation, `/opt/comfyui_*` suggestions | `client.ts`, `forms.ts` |
-| `ThumbGrid.tsx` | `client/src/components/ThumbGrid.tsx` | Lazy `thumbUrl` only. Arrow keys move. Cover, or contain when Show full photo is on. Optional blur | `types.ts` |
-| `Lightbox.tsx` | `client/src/components/Lightbox.tsx` | Full-res overlay. Contain/letterbox when Show full photo is on. Filmstrip can blur | `types.ts` |
+| `ThumbGrid.tsx` | `client/src/components/ThumbGrid.tsx` | Lazy `thumbUrl` only. Activate opens the overlay. Arrow keys do not move the sequence. Cover, or contain when Show full photo is on. Optional blur | `types.ts` |
+| `ImageFeed.tsx` | `client/src/components/ImageFeed.tsx` | Bottom feed bar (z-index 99). Activate a thumb to open the overlay. Same component for a later server feed | `feed.ts` |
+| `Lightbox.tsx` | `client/src/components/Lightbox.tsx` | Fullscreen overlay (z-index 1001). Overlay-only keys, stop at ends, new tab and new window. Pinch scales the image; a one-finger swipe steps only at the fitted size | `feed.ts`, `lightboxZoom.ts` |
+| `lightboxZoom.ts` | `client/src/lib/lightboxZoom.ts` | Pinch scale, swipe-versus-zoom decision, pan limits | — |
 
-Filmstrip thumbs also use `thumbUrl`. `fullUrl` is requested only by `Lightbox.tsx`.
+Feed thumbs use `thumbUrl`. `fullUrl` is requested by the overlay image and by Open in new tab / Open in new window.
 
 ## Servers
 
 | File | Path | Role | Depends on |
 | --- | --- | --- | --- |
 | `AddServerDialog.tsx` | `client/src/components/AddServerDialog.tsx` | Name + http(s) URL | `forms.ts` |
-| `ServerFrame.tsx` | `client/src/components/ServerFrame.tsx` | Sandboxed iframe with address, back, refresh, and open externally. Toolbar stays while shell chrome is hidden. Ready state lights the profile badge | `types.ts` |
+| `ServerFrame.tsx` | `client/src/components/ServerFrame.tsx` | Sandboxed iframe with address, back, refresh, zoom in, zoom out, and open externally. Zoom scales the iframe only and resets on remount. Toolbar stays while shell chrome is hidden. Ready state lights the profile badge | `types.ts` |
 
 ## API and forms
 

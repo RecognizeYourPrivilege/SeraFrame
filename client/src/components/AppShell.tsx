@@ -18,7 +18,10 @@ export function AppShell() {
   const desktop = useMediaQuery("(min-width: 840px)");
   const mobile = useMediaQuery(PHONE_QUERY);
   const catalog = useServers();
-  const immersive = route.kind === "server";
+  // Phone server view keeps the shared Mobile layout (option 1 until the user
+  // changes it). Desktop server routes still start with shell chrome hidden.
+  const phoneServer = mobile && route.kind === "server";
+  const immersive = route.kind === "server" && !mobile;
   const chrome = useChromeVisibility(prefs.serversAutoHide, immersive);
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -82,6 +85,10 @@ export function AppShell() {
   useEffect(() => {
     if (!mobile || prefs.mobileLayout !== 2) setOverflowOpen(false);
   }, [mobile, prefs.mobileLayout]);
+
+  useEffect(() => {
+    if (phoneServer) chrome.restore();
+  }, [phoneServer, chrome.restore]);
 
   useEffect(() => {
     if (!railOpen || desktop) return;

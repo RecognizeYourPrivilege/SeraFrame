@@ -169,7 +169,7 @@ No proxy endpoints in v1. FRONT embeds `url` in sandboxed iframe; on block, open
 - `SERAFRAME_PORT` — default `18880`
 - `SERAFRAME_TRUST_PROXY` — `1` when HTTPS terminated upstream (Secure cookies)
 
-Published image (tag push `v*.*.*`, first proposed tag `v0.1.0`): `ghcr.io/recognizeyourprivilege/seraframe`. See [RELEASE.md](RELEASE.md).
+Published image (tag push `v*.*.*`, current release `v0.2.0`; do not move `v0.1.0`): `ghcr.io/recognizeyourprivilege/seraframe`. See [RELEASE.md](RELEASE.md).
 
 ## Versioning
 Contract **v1**. Breaking changes = new version bump posted in SeraFrame room before FRONT adopts.

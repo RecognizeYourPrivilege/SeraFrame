@@ -46,15 +46,15 @@ Login is `POST /api/auth/login` with JSON `{"password":"..."}` and header `X-CSR
 
 ## Published image
 
-The first proposed release tag is **v0.1.0**. Pushing a `v*.*.*` tag runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml), which pushes `ghcr.io/recognizeyourprivilege/seraframe` to GHCR and opens a GitHub Release. Details are in [RELEASE.md](RELEASE.md).
+The current release tag is **v0.2.0** (a new release; do not move v0.1.0). Pushing a `v*.*.*` tag runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml), which pushes `ghcr.io/recognizeyourprivilege/seraframe` to GHCR and opens a GitHub Release. Details are in [RELEASE.md](RELEASE.md). Changes are in [CHANGELOG.md](CHANGELOG.md).
 
 ```bash
-docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
+docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.2.0
 
 docker run --rm -p 18880:18880 \
   -e SERAFRAME_ADMIN_PASSWORD='change-me' \
   -v seraframe-data:/data \
-  ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
+  ghcr.io/recognizeyourprivilege/seraframe:v0.2.0
 ```
 
 Leave `SERAFRAME_SECRET_KEY` unset so the key file is created in the volume and reused on the next start. Set it only when you want that exact value; the file is then left unchanged. The image serves the client UI at `/`.
