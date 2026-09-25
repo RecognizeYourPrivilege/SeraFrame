@@ -89,12 +89,12 @@ docker compose up
 [`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs on git tags `v*.*.*`. The image includes the baked client, so `/` is the login screen.
 
 - Registry image: `ghcr.io/recognizeyourprivilege/seraframe` (GHCR lowercases the repository name)
-- First proposed tag: `v0.1.0`, also pushed as `0.1.0`, `0.1`, and `latest`
+- Current release tag: `v0.2.0` (new release; do not move `v0.1.0`), also pushed as `0.2.0` and `0.2`
 - The same workflow creates a GitHub Release for that tag
 - Registry login uses `GITHUB_TOKEN` (`packages: write`). The release step needs `contents: write`
 
 ```bash
-docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.1.0
+docker pull ghcr.io/recognizeyourprivilege/seraframe:v0.2.0
 ```
 
 Pull and run notes are in [RELEASE.md](RELEASE.md). Runtime still requires `SERAFRAME_ADMIN_PASSWORD`. Omit `SERAFRAME_SECRET_KEY` to persist the key in the data volume.

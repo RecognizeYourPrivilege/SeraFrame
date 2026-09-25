@@ -225,7 +225,6 @@ textarea {
 .hint,
 .lede,
 .sidebar-note,
-.lightbox-hint,
 .tree-empty,
 .status-line,
 .page-count,
@@ -237,7 +236,6 @@ textarea {
 .field-hint,
 .hint,
 .sidebar-note,
-.lightbox-hint,
 .rail-note,
 .switch-hint {
   font-size: 0.92rem;
@@ -760,7 +758,7 @@ code {
 
 .album-cover img,
 .thumb img,
-.strip-thumb img {
+.feed-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -773,7 +771,7 @@ code {
 
 .album-cover.is-contain img,
 .thumb.is-contain img,
-.lightbox.is-contain .strip-thumb img {
+.feed-thumb.is-contain img {
   object-fit: contain;
   background: var(--letterbox);
 }
@@ -894,107 +892,160 @@ img.is-blurred {
   padding-bottom: 1.5rem;
 }
 
+.image-feed {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99;
+  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(16px);
+  padding: 0.45rem calc(0.6rem + env(safe-area-inset-right, 0px)) calc(0.45rem + env(safe-area-inset-bottom, 0px))
+    calc(0.6rem + env(safe-area-inset-left, 0px));
+}
+
+.image-feed-list {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  overflow-x: auto;
+}
+
+.feed-thumb {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: var(--letterbox);
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+.feed-thumb:hover,
+.feed-thumb:focus-visible {
+  border-color: var(--accent);
+}
+
+.stage.gallery.has-image-feed {
+  padding-bottom: calc(6.25rem + env(safe-area-inset-bottom, 0px));
+}
+
 .lightbox {
   position: fixed;
   inset: 0;
-  z-index: 80;
-  background: var(--bg-sunken);
-  display: flex;
-  flex-direction: column;
+  z-index: 1001;
+  color: #f4f6fb;
 }
 
-.lightbox-top,
-.lightbox-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: calc(0.5rem + env(safe-area-inset-top, 0px)) calc(0.75rem + env(safe-area-inset-right, 0px)) 0.5rem
-    calc(0.75rem + env(safe-area-inset-left, 0px));
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--line);
-}
-
-.lightbox-bar {
-  border-bottom: 0;
-  border-top: 1px solid var(--line);
-  flex-wrap: wrap;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-}
-
-.lightbox-top h2 {
-  flex: 1;
+.lightbox-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   min-width: 0;
-  font-size: 1rem;
-  font-weight: 650;
-  overflow-wrap: anywhere;
+  min-height: 0;
+  background: rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+.lightbox-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.lightbox-close,
+.lightbox-chevron,
+.lightbox-stage img,
+.lightbox-bar {
+  pointer-events: auto;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: calc(0.6rem + env(safe-area-inset-top, 0px));
+  right: calc(0.6rem + env(safe-area-inset-right, 0px));
+  z-index: 2;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.lightbox-chevron {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  transform: translateY(-50%);
+  background: rgba(18, 20, 28, 0.88);
+  color: #f4f6fb;
+}
+
+.lightbox-chevron.is-prev {
+  left: calc(0.45rem + env(safe-area-inset-left, 0px));
+}
+
+.lightbox-chevron.is-next {
+  right: calc(0.45rem + env(safe-area-inset-right, 0px));
 }
 
 .lightbox-stage {
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 4.75rem 4.25rem 6.25rem;
   display: grid;
   place-items: center;
-  padding: 0.5rem;
+  min-height: 0;
   touch-action: pan-y;
-  background: var(--letterbox);
 }
 
 .lightbox-stage img {
-  grid-area: 1 / 1;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
 
-.lightbox.is-cover .lightbox-stage img.full,
-.lightbox.is-cover .lightbox-stage img.placeholder {
+.lightbox.is-cover .lightbox-stage img.full {
   width: 100%;
   height: 100%;
   max-width: none;
   object-fit: cover;
 }
 
-.lightbox-stage img.placeholder {
-  opacity: 0.85;
+.lightbox-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem calc(0.75rem + env(safe-area-inset-right, 0px)) calc(0.7rem + env(safe-area-inset-bottom, 0px))
+    calc(0.75rem + env(safe-area-inset-left, 0px));
+  background: rgba(12, 14, 20, 0.88);
+}
+
+.lightbox-title {
+  flex: 1 1 8rem;
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .pos {
   margin-right: auto;
   font-variant-numeric: tabular-nums;
-}
-
-.lightbox-hint {
-  margin: 0;
-  padding: 0 calc(0.85rem + env(safe-area-inset-right, 0px)) calc(0.7rem + env(safe-area-inset-bottom, 0px))
-    calc(0.85rem + env(safe-area-inset-left, 0px));
-  background: var(--bg-raised);
-}
-
-.filmstrip {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  overflow-x: auto;
-  padding: 0.6rem calc(0.75rem + env(safe-area-inset-right, 0px)) 0.6rem calc(0.75rem + env(safe-area-inset-left, 0px));
-  background: var(--bg-raised);
-  border-top: 1px solid var(--line);
-}
-
-.strip-thumb {
-  width: 72px;
-  height: 72px;
-  min-width: 72px;
-  min-height: 72px;
-  padding: 0;
-  border-radius: 6px;
-  border: 2px solid transparent;
-  background: var(--letterbox);
-  overflow: hidden;
-}
-
-.strip-thumb[aria-current="true"] {
-  border-color: var(--accent);
 }
 
 .frame-shell {
@@ -1050,7 +1101,12 @@ img.is-blurred {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   background: #0e1016;
+}
+
+.frame-zoom {
+  transform-origin: top left;
 }
 
 .frame-stage iframe {
@@ -1058,6 +1114,21 @@ img.is-blurred {
   height: 100%;
   border: 0;
   background: #fff;
+  display: block;
+}
+
+.embed-zoom {
+  flex: none;
+  min-height: 44px;
+}
+
+.embed-zoom-label {
+  flex: none;
+  min-width: 3.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--muted);
 }
 
 .frame-loading,
@@ -1090,7 +1161,7 @@ img.is-blurred {
 
 .profile-menu {
   position: fixed;
-  z-index: 70;
+  z-index: 200;
   top: 4.4rem;
   right: 0.8rem;
   width: min(22.5rem, calc(100vw - 1.2rem));
@@ -1297,7 +1368,7 @@ img.is-blurred {
 .backdrop {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 400;
   background: rgba(0, 0, 0, 0.62);
   display: grid;
   place-items: center;
@@ -1705,6 +1776,26 @@ img.is-blurred {
 
   .shell.is-phone .thumb-grid {
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
+  }
+
+  .shell.is-phone.is-layout-1:not(.is-immersive) .image-feed,
+  .shell.is-phone.is-layout-3:not(.is-immersive) .image-feed {
+    bottom: calc(4.15rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: 0.45rem;
+  }
+
+  .shell.is-phone.is-layout-1:not(.is-immersive) .stage.gallery.has-image-feed,
+  .shell.is-phone.is-layout-3:not(.is-immersive) .stage.gallery.has-image-feed {
+    padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .lightbox-stage {
+    inset: 4.25rem 0.4rem 9.5rem;
+  }
+
+  .lightbox-bar .btn {
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .shell.is-phone .crumb {
