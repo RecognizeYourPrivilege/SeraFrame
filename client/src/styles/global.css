@@ -1003,6 +1003,7 @@ img.is-blurred {
   display: grid;
   place-items: center;
   min-height: 0;
+  overflow: hidden;
   touch-action: pan-y;
 }
 
@@ -1011,6 +1012,8 @@ img.is-blurred {
   max-height: 100%;
   object-fit: contain;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  transform-origin: center center;
+  touch-action: none;
 }
 
 .lightbox.is-cover .lightbox-stage img.full {
