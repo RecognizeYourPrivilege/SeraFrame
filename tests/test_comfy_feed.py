@@ -197,6 +197,40 @@ def test_trim_drops_oldest_occurrences():
     assert names == ["b.png", "c.png"]
 
 
+def test_default_connector_builds_a_socket_client():
+    from app.comfy_feed import default_connector
+
+    connector = default_connector("ws://127.0.0.1:9/ws?clientId=abc")
+    assert hasattr(connector, "__aenter__")
+
+
+def test_listener_records_a_down_socket():
+    from app.comfy_feed import ComfyFeedService
+
+    def connector(url):
+        raise ConnectionError(url)
+
+    service = ComfyFeedService(connector=connector)
+
+    async def run():
+        try:
+            await service.ensure_listening("server-1", "http://127.0.0.1:8188")
+            snap = {}
+            for _ in range(100):
+                snap = service.snapshot("server-1", save_node_only=False)
+                if snap["error"] == "comfy websocket unavailable" and snap["listening"] is False:
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                raise AssertionError(snap)
+            assert snap["items"] == []
+            assert len(snap["clientId"]) == 32
+        finally:
+            await service.shutdown()
+
+    asyncio.run(run())
+
+
 def test_listener_ingests_executed_frames():
     from app.comfy_feed import ComfyFeedService
 
@@ -465,19 +499,29 @@ def test_view_does_not_follow_redirects_and_reports_upstream_failure(client):
     assert failed.json()["error"]["code"] == "io_error"
 
 
-def test_feed_events_http_snapshot(client):
+def test_feed_events_route_returns_the_snapshot(client):
+    """The live stream stays open, which deadlocks TestClient if the body never ends.
+
+    The async generator is covered in ``test_event_stream_emits_snapshot_then_new_item``.
+    This checks the HTTP route: auth already passed, content type, and snapshot bytes.
+    """
+    from app.comfy_feed import format_sse
+
     assert login(client).status_code == 200
     server = _create_server(client)
     _block_network(client)
-    client.app.state.comfy_feed.ingest_payload(server["id"], EXECUTED)
-    with client.stream("GET", f"/api/servers/{server['id']}/feed/events", timeout=5) as response:
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/event-stream")
-        text = ""
-        for chunk in response.iter_text():
-            text += chunk
-            if "\n\n" in text:
-                break
-    assert text.startswith("event: snapshot\n")
-    payload = json.loads(text.split("data: ", 1)[1].split("\n", 1)[0])
+    service = client.app.state.comfy_feed
+    service.ingest_payload(server["id"], EXECUTED)
+
+    async def finite(server_id, *, save_node_only, is_disconnected):
+        yield format_sse("snapshot", service.snapshot(server_id, save_node_only=save_node_only))
+
+    service.iter_events = finite
+    response = client.get(f"/api/servers/{server['id']}/feed/events")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.text.startswith("event: snapshot\n")
+    payload = json.loads(response.text.split("data: ", 1)[1].split("\n", 1)[0])
     assert [item["name"] for item in payload["items"]] == ["ComfyUI_00001_.png", "preview.png"]
+    unknown = client.get("/api/servers/missing/feed/events")
+    assert unknown.status_code == 404

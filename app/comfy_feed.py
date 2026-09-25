@@ -281,7 +281,6 @@ def default_connector(url: str) -> _AsyncConnect:
         ping_interval=20,
         ping_timeout=20,
         max_size=16 * 1024 * 1024,
-        proxy=None,
     )
 
 
