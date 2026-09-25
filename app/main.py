@@ -17,10 +17,11 @@ from urllib.parse import quote, urlsplit
 
 from fastapi import Body, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.comfy_feed import ComfyFeedService, view_param_error
 from app.config import (
     CSRF_COOKIE,
     CSRF_TTL_SECONDS,
@@ -216,13 +217,17 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        yield
-        app.state.db.close()
+        try:
+            yield
+        finally:
+            await app.state.comfy_feed.shutdown()
+            app.state.db.close()
 
     app = FastAPI(title="SeraFrame", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings = settings
     app.state.db = db
     app.state.fernet = fernet
+    app.state.comfy_feed = ComfyFeedService()
 
     @app.exception_handler(APIError)
     async def api_error(_request: Request, exc: APIError) -> JSONResponse:
@@ -537,7 +542,75 @@ def create_app() -> FastAPI:
                 conn.execute("DELETE FROM servers WHERE id = ?", (server_id,))
         if row is None:
             raise APIError(404, "not_found", "server not found")
+        request.app.state.comfy_feed.drop(server_id)
         return {"ok": True}
+
+    @app.get("/api/servers/{server_id}/feed")
+    async def server_feed(
+        request: Request,
+        server_id: str,
+        saveNodeOnly: bool = Query(default=False),
+    ) -> JSONResponse:
+        _require_session(request)
+        row = _server_or_404(request, server_id)
+        service: ComfyFeedService = request.app.state.comfy_feed
+        await service.ensure_listening(server_id, row["url"])
+        return JSONResponse(
+            service.snapshot(server_id, save_node_only=saveNodeOnly),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/servers/{server_id}/feed/events")
+    async def server_feed_events(
+        request: Request,
+        server_id: str,
+        saveNodeOnly: bool = Query(default=False),
+    ) -> StreamingResponse:
+        _require_session(request)
+        row = _server_or_404(request, server_id)
+        service: ComfyFeedService = request.app.state.comfy_feed
+        await service.ensure_listening(server_id, row["url"])
+        return StreamingResponse(
+            service.iter_events(
+                server_id,
+                save_node_only=saveNodeOnly,
+                is_disconnected=request.is_disconnected,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @app.get("/api/servers/{server_id}/view")
+    async def server_view(
+        request: Request,
+        server_id: str,
+        filename: str = Query(default=""),
+        image_type: str = Query(default="", alias="type"),
+        subfolder: str = Query(default=""),
+        preview: str | None = Query(default=None),
+    ) -> Response:
+        _require_session(request)
+        row = _server_or_404(request, server_id)
+        error = view_param_error(filename, image_type, subfolder, preview)
+        if error is not None:
+            raise error
+        service: ComfyFeedService = request.app.state.comfy_feed
+        if not service.has_occurrence(server_id, filename, image_type, subfolder):
+            raise APIError(404, "not_found", "image not found")
+        media_type, body = await service.fetch_view(
+            row["url"], filename, image_type, subfolder, preview
+        )
+        return Response(
+            content=body,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "private, max-age=3600",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     @app.get("/{full_path:path}", response_model=None)
     def spa_fallback(full_path: str) -> Response:
@@ -828,6 +901,16 @@ def _set_csrf_cookie(response: JSONResponse, settings: Settings, token: str) -> 
         samesite="lax",
         path="/",
     )
+
+
+def _server_or_404(request: Request, server_id: str):
+    row = request.app.state.db.fetchone(
+        "SELECT id, name, url FROM servers WHERE id = ?",
+        (server_id,),
+    )
+    if row is None:
+        raise APIError(404, "not_found", "server not found")
+    return row
 
 
 def _source_or_404(request: Request, source_id: str):

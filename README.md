@@ -84,7 +84,7 @@ pytest
 
 ## v1 scope
 
-Sources are local directories or SFTP. Paths are sandboxed. SFTP passwords and private keys are encrypted at rest and are not returned by GET. Thumbnails are generated on demand and cached under the data directory. ComfyUI servers are name and URL only. This service does not proxy ComfyUI, write to sources, or speak FTP.
+Sources are local directories or SFTP. Paths are sandboxed. SFTP passwords and private keys are encrypted at rest and are not returned by GET. Thumbnails are generated on demand and cached under the data directory. ComfyUI server records are name and URL only. The live session image feed listens on that server's websocket and proxies `/view` bytes for images from the current session. It does not browse Comfy history, write to sources, or speak FTP.
 
 ## FRONT (client UI)
 
