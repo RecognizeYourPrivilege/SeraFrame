@@ -1,5 +1,5 @@
 # SeraFrame — INTEGRATION CONTRACT v1
-Draft 2, extended by Draft 2.1.4 (change-password, session list/revoke, server Appearance). Contract version remains **v1**. Base URL: same origin as the SPA. All JSON unless noted. Cookie session after login.
+Draft 2, extended by Draft 2.1.4 (change-password, session list/revoke, server Appearance) and Draft 2.1.6a (live Comfy session image feed). Contract version remains **v1**. The feed routes are additive. Base URL: same origin as the SPA. All JSON unless noted. Cookie session after login.
 
 ## Conventions
 - Auth: session cookie `seraframe_session` (HttpOnly, Secure, SameSite=Lax).
@@ -160,7 +160,98 @@ Cache: server-side disk cache keyed by `(source_id, rel_path, mtime_or_etag)`. C
 type Server = { id: string; name: string; url: string }; // url must be http(s)
 ```
 
-No proxy endpoints in v1. FRONT embeds `url` in sandboxed iframe; on block, open externally.
+`GET` / `POST` / `DELETE /api/servers` stay metadata only. FRONT still embeds `url` in a sandboxed iframe; on block, open externally. The live session feed below is an extra set of GET routes. It does not change the `Server` object and it does not list Comfy history.
+
+### Live session image feed (Draft 2.1.6a)
+
+Populates an S-2 feed from the Comfy websocket for one configured server. The current SPA does not call these routes yet. Unauthenticated calls → **401** `unauthorized`, same as other `/api/servers*`. No CSRF (all three are GET). Unknown `{id}` → **404** `not_found`, message `server not found`.
+
+| Method | Path | Query | Success |
+|--------|------|-------|---------|
+| GET | `/api/servers/{id}/feed` | `saveNodeOnly` bool, default `false` | feed snapshot, `Cache-Control: no-store` |
+| GET | `/api/servers/{id}/feed/events` | same | `text/event-stream` |
+| GET | `/api/servers/{id}/view` | `filename`, `type`, `subfolder`, optional `preview` | image bytes |
+
+```ts
+type FeedItem = {
+  id: string;       // stable per image occurrence; 32 lowercase hex chars
+  name: string;     // Comfy filename, not the subfolder
+  thumbUrl: string; // same-origin path
+  fullUrl: string;  // same-origin path
+};
+
+type ServerFeed = {
+  items: FeedItem[];          // oldest first
+  clientId: string;           // Comfy /ws clientId this process is listening as
+  listening: boolean;         // that socket is open now
+  error: string | null;       // null, or "comfy websocket unavailable"
+};
+```
+
+`items` are the current observation window: node `executed` events seen on this process's Comfy websocket since the listener attached. Oldest first (index 0 is the earliest image still held). At most **500** occurrences are kept; older ones are dropped. Memory only. Deleted with the server row, or when the process stops. Comfy `/history` and the output folder are not read to fill the list. A down Comfy host still returns **200** with `listening: false`.
+
+Opening `GET .../feed` or `GET .../feed/events` starts the listener if it is not running. The first snapshot can report `listening: false` and `error: null` while the socket is still opening. The event stream then sends `status`.
+
+`saveNodeOnly` defaults to **false**: PreviewImage and SaveImage both stay (any executed image with `type` `output`, `input`, or `temp`). When `true`, an image is kept only if the event includes node class `SaveImage` (`class_type` or `node_type` on the detail or on that image). The usual Comfy `executed` frame has no class. Then `type=output` is kept and `type=temp` is dropped (SaveImage writes `output`, PreviewImage writes `temp`). Ids that contain `:` are kept. pysssss hides those only when the live graph says the parent is a group; this service does not have that graph.
+
+`id` is the first 32 hex characters of SHA-256 over `prompt_id`, `node`, the image's index in that event, `filename`, `subfolder`, and `type`, joined by NUL (`\0`). The same occurrence is stored once.
+
+#### FeedItem URLs
+
+Same-origin, so the SPA can put them in `<img src>` without Comfy cookies or CORS. `{id}` is the SeraFrame server id. Query values are percent-encoded (`quote`, spaces as `%20`).
+
+- `fullUrl` = `/api/servers/{id}/view?filename={filename}&type={type}&subfolder={subfolder}`
+- `thumbUrl` = the same query plus `&preview=webp%3B90` (`preview=webp;90`)
+
+These are not absolute Comfy `/view` URLs.
+
+`GET /api/servers/{id}/view` proxies `{server url}/view` with the same `filename`, `type`, `subfolder`, and `preview`. The server URL's query and fragment are ignored; a path prefix is kept (`https://gpu.example/comfy` → `https://gpu.example/comfy/view?...`). Redirects are not followed.
+
+The proxy only fetches a `filename` + `type` + `subfolder` that is still in that server's session feed. Any other tuple → **404** `not_found`, message `image not found`, and Comfy is not called. This is not a general file browser.
+
+- Missing `filename` → **400** `validation`, message `filename is required`
+- `type` other than `output`, `input`, or `temp` → **400** `validation`, message `type must be output, input, or temp`
+- `..`, a slash or backslash in `filename`, an absolute `subfolder`, or `..` inside `subfolder` → **400** `path_rejected`
+- `preview`, when present, must be `webp` or `jpeg`, optional `;` and a quality from 1 to 100. Otherwise **400** `validation`
+- Comfy HTTP 404 → **404** `not_found`, message `image not found`
+- Comfy HTTP 400 or 403 → **400** `path_rejected`
+- Connection failure, redirect, other upstream status, or a body over 64MiB → **502** `io_error`, message `comfy view unavailable`
+
+Raster `Content-Type` values (`image/*` except `image/svg+xml`) pass through. Anything else is `application/octet-stream`. `Cache-Control: private, max-age=3600`. `X-Content-Type-Options: nosniff`.
+
+#### Event stream
+
+`GET /api/servers/{id}/feed/events` uses the session cookie (same-origin `EventSource` or `fetch`). `Content-Type` is `text/event-stream`.
+
+- First frame: `event: snapshot` and `data` is a `ServerFeed` (already filtered by `saveNodeOnly`)
+- Then `event: item` with `data` `{ "item": FeedItem }` for each new occurrence that passes the filter
+- `event: status` with `data` `{ "listening": boolean, "error": string | null }` when the socket opens or drops
+- A comment line `: keepalive` about every 15 seconds
+
+#### Comfy websocket
+
+SeraFrame connects to `ws://` or `wss://` `{base}/ws?clientId={clientId}` (`http` → `ws`, `https` → `wss`). `clientId` is 32 hex characters, stable until that server's feed session is dropped, and is the `clientId` field in `ServerFeed`. The socket `Origin` is the Comfy HTTP origin (scheme + host) so Comfy's loopback Host/Origin check can pass. Text frames are parsed. Binary preview frames are ignored.
+
+Accepted payload (websocket frame, or the `data` object alone):
+
+```json
+{
+  "type": "executed",
+  "data": {
+    "node": "9",
+    "prompt_id": "…",
+    "output": {
+      "images": [
+        { "filename": "ComfyUI_00001_.png", "subfolder": "", "type": "output" }
+      ]
+    }
+  }
+}
+```
+
+`type` on an image defaults to `output` when it is missing. Entries without a usable `filename`, or with a `type` outside `output` / `input` / `temp`, are skipped.
+
+**Live Comfy blocker.** Current Comfy sends `executed` only to the websocket whose id equals the prompt's `client_id`. The embedded Comfy page uses its own id, so generations queued there are not delivered to SeraFrame's socket. Events show up when the prompt is queued with this feed's `clientId`, or if a future Comfy broadcasts `executed`. This service does not poll `/history` to fill that gap. No live Comfy host was required to test the mapping.
 
 ## Bootstrap / env (infra, not FRONT calls)
 - `SERAFRAME_ADMIN_PASSWORD` — **required**. Process exits if missing or empty. No default and no generated password. Hashed on first boot if no user row. After that, only `POST /api/auth/change-password` changes the stored hash.

@@ -132,7 +132,7 @@ Dev mocks return `image/svg+xml` placeholders so the UI can run without a thumbn
 
 ## Servers
 
-No proxy routes. The client puts `url` in a sandboxed iframe (`allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals`, no top navigation). If the frame is blocked, blank, or still loading after 8 seconds, the panel tells the user and shows **Open externally** (`target="_blank"`, `rel="noopener noreferrer"`). The same link stays in the frame toolbar even when the embed looks healthy, because frame blocking is not always detectable.
+The client puts `url` in a sandboxed iframe (`allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals`, no top navigation). If the frame is blocked, blank, or still loading after 8 seconds, the panel tells the user and shows **Open externally** (`target="_blank"`, `rel="noopener noreferrer"`). The same link stays in the frame toolbar even when the embed looks healthy, because frame blocking is not always detectable. This client does not call the live session feed routes yet (`GET /api/servers/{id}/feed`, `GET /api/servers/{id}/feed/events`, `GET /api/servers/{id}/view`). Those are documented in the contract for a later S-2 wire-up.
 
 | Method | Path | Body | Success |
 | --- | --- | --- | --- |
@@ -149,7 +149,7 @@ The client rejects non-http(s) URLs and URLs with embedded credentials before PO
 ## Not called by FRONT
 
 - FTP, file write or delete, favorites, multi-user admin
-- Any reverse proxy of a ComfyUI URL
+- The live session feed (`/api/servers/{id}/feed`, `/feed/events`, `/view`). The contract defines them; this client does not call them yet
 - Bootstrap env (`SERAFRAME_ADMIN_PASSWORD`, `SERAFRAME_SECRET_KEY`, `SERAFRAME_DATA_DIR`, `SERAFRAME_PORT`, `SERAFRAME_TRUST_PROXY`). Those are BACK-owned. The login form collects the password only; it does not know the env var.
 
 ## Dev wiring
