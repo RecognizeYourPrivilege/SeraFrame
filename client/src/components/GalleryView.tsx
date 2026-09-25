@@ -4,11 +4,13 @@ import { formatApiError, isAbortError } from "../api/errors";
 import type { CreateSource, Source, Still } from "../api/types";
 import { addSourceRequested, clearAddSourceRequest, subscribeAddSource } from "../lib/addSourceRequest";
 import { collectAlbums, photoLabel, sourceConnectionText, type Album, type FolderFailure, type FolderPhase } from "../lib/albums";
+import { stillToFeedItem } from "../lib/feed";
 import type { GallerySection } from "../lib/route";
 import { sectionHash, SECTION_LABEL } from "../lib/route";
 import { AddSourceDialog } from "./AddSourceDialog";
 import { AlbumCard } from "./AlbumCard";
 import { Dialog } from "./Dialog";
+import { ImageFeed } from "./ImageFeed";
 import { Lightbox } from "./Lightbox";
 import { ThumbGrid } from "./ThumbGrid";
 
@@ -151,6 +153,8 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
   const itemCount = albums.reduce((sum, item) => sum + item.stillCount, 0);
   const openAlbum = album ? albums.find((item) => item.sourceId === album.sourceId && item.path === album.path) : null;
   const albumTitle = openAlbum?.title || album?.path.split("/").filter(Boolean).pop() || "Album";
+  const feedItems = useMemo(() => visibleStills.map(stillToFeedItem), [visibleStills]);
+  const feedActive = (album != null || section === "foryou") && stillsStatus === "ready" && feedItems.length > 0;
 
   async function createSource(body: CreateSource) {
     const created = await api.createSource(body);
@@ -179,8 +183,12 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
     }
   }
 
+  const mainClass = ["stage", "gallery", chromeHidden ? "has-fab" : "", feedActive ? "has-image-feed" : ""]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <main id="main" className={chromeHidden ? "stage gallery has-fab" : "stage gallery"}>
+    <main id="main" className={mainClass}>
       {album ? (
         <AlbumPhotos
           section={section}
@@ -247,12 +255,13 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
         />
       )}
 
-      {lightboxIndex != null && visibleStills[lightboxIndex] ? (
+      {feedActive ? <ImageFeed items={feedItems} fit={fit} blur={blurThumbs} onOpen={setLightboxIndex} /> : null}
+
+      {lightboxIndex != null && feedItems[lightboxIndex] ? (
         <Lightbox
-          stills={visibleStills}
+          items={feedItems}
           index={lightboxIndex}
           fit={fit}
-          blurThumbs={blurThumbs}
           onIndex={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
         />

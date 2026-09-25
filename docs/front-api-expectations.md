@@ -121,7 +121,7 @@ Suggestions are not created until the user saves. Picking one only fills the loc
 
 ## Media
 
-The client does not call these with `fetch`. The grid and the filmstrip use `thumbUrl` as an `<img src>`. The overlay is the only place that uses `fullUrl`.
+The client does not call these with `fetch`. The grid and the bottom image feed use `thumbUrl` as an `<img src>`. The overlay shows `fullUrl`, and Open in new tab / Open in new window navigate to that same URL.
 
 | Method | Path | Query | Success |
 | --- | --- | --- | --- |
