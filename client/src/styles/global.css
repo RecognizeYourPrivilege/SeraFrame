@@ -60,7 +60,17 @@ body {
   font: 16px/1.45 var(--font);
 }
 
+/* Gallery chrome stays in the visual viewport. Long grids scroll in .stage only. */
+html:has(.shell),
 body:has(.shell) {
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+#root:has(.shell) {
+  height: 100dvh;
+  max-height: 100dvh;
   overflow: hidden;
 }
 
@@ -385,7 +395,13 @@ code {
 }
 
 .shell {
-  height: 100dvh;
+  position: relative;
+  height: 100%;
+  max-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -393,8 +409,10 @@ code {
 
 .shell-body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
+  overflow: hidden;
 }
 
 .topbar {
@@ -667,7 +685,9 @@ code {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .stage.server-embed {
@@ -932,13 +952,15 @@ img.is-blurred {
 }
 
 .stage.gallery.has-image-feed {
-  padding-bottom: calc(6.25rem + env(safe-area-inset-bottom, 0px));
+  /* Thumb row (72px) + feed padding + border + a gap so the last row clears the bar. */
+  padding-bottom: calc(72px + 0.9rem + 1px + 1.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 .lightbox {
   position: fixed;
   inset: 0;
   z-index: 1001;
+  overflow: hidden;
   color: #f4f6fb;
 }
 
@@ -1000,27 +1022,32 @@ img.is-blurred {
 .lightbox-stage {
   position: absolute;
   inset: 4.75rem 4.25rem 6.25rem;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   touch-action: pan-y;
 }
 
-.lightbox-stage img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-  transform-origin: center center;
-  touch-action: none;
-}
-
+/* Fitted 1× is contain-fit: the whole still is inside the stage. Letterbox is fine. */
+.lightbox-stage img,
+.lightbox.is-contain .lightbox-stage img.full,
 .lightbox.is-cover .lightbox-stage img.full {
+  display: block;
   width: 100%;
   height: 100%;
-  max-width: none;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-self: stretch;
+  object-fit: contain;
+  object-position: center center;
+  transform-origin: center center;
+  touch-action: none;
 }
 
 .lightbox-bar {
