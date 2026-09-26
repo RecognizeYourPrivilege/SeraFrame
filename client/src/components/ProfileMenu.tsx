@@ -164,7 +164,7 @@ export function ProfileMenu({ anchor, profileRef, onClose }: ProfileMenuProps) {
             />
             <Switch
               label="Show full photo"
-              hint="Letterbox album covers, thumbnails, and the viewer. No hard crop."
+              hint="Letterbox album covers and thumbnails. No hard crop. The fullscreen viewer always shows the whole photo."
               checked={prefs.showFullPhoto}
               onChange={(showFullPhoto) => update({ showFullPhoto })}
             />

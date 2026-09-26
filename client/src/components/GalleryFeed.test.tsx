@@ -42,7 +42,7 @@ describe("gallery feed order", () => {
     vi.unstubAllGlobals();
   });
 
-  async function render(query = "") {
+  async function render(query = "", showFullPhoto = true) {
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>(async (input) => {
@@ -63,7 +63,7 @@ describe("gallery feed order", () => {
             section="albums"
             album={{ sourceId: "src", path: "portraits" }}
             query={query}
-            showFullPhoto
+            showFullPhoto={showFullPhoto}
             blurThumbs={false}
             chromeHidden={false}
           />
@@ -107,5 +107,22 @@ describe("gallery feed order", () => {
     expect(document.body.textContent).toContain("1 / 1");
     expect(document.querySelector("[aria-label='Previous image']")).toBeNull();
     expect(document.querySelector("[aria-label='Next image']")).toBeNull();
+  });
+
+  it("keeps the bottom feed and contain-fits the viewer even when thumbs crop", async () => {
+    await render("", false);
+    expect(document.querySelector(".image-feed")).not.toBeNull();
+    expect(document.querySelector(".stage.gallery.has-image-feed")).not.toBeNull();
+    expect(document.querySelector(".thumb.is-contain")).toBeNull();
+
+    const thumb = document.querySelector(".image-feed button");
+    if (!(thumb instanceof HTMLButtonElement)) throw new Error("missing feed thumb");
+    await act(async () => {
+      thumb.click();
+    });
+    const dialog = document.querySelector("[role='dialog']");
+    expect(dialog?.classList.contains("is-contain")).toBe(true);
+    expect(dialog?.classList.contains("is-cover")).toBe(false);
+    expect(document.querySelector(".image-feed")).not.toBeNull();
   });
 });

@@ -261,7 +261,6 @@ export function GalleryView({ section, album, query, showFullPhoto, blurThumbs, 
         <Lightbox
           items={feedItems}
           index={lightboxIndex}
-          fit={fit}
           onIndex={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
         />
