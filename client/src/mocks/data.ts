@@ -21,16 +21,9 @@ export function seedLibrary(): Record<string, MockNode> {
         {
           name: "portraits",
           relPath: "portraits",
-          node: folder([
-            "portrait-01.png",
-            "portrait-02.png",
-            "portrait-03.png",
-            "portrait-04.png",
-            "portrait-05.png",
-            "portrait-06.png",
-            "portrait-07.png",
-            "portrait-08.png",
-          ]),
+          node: folder(
+            Array.from({ length: 36 }, (_, index) => `portrait-${String(index + 1).padStart(2, "0")}.png`),
+          ),
         },
         {
           name: "landscapes",

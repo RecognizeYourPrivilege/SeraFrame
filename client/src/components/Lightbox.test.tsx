@@ -76,6 +76,8 @@ describe("image feed and lightbox", () => {
     const dialog = document.querySelector("[role='dialog']");
     expect(dialog).not.toBeNull();
     expect((dialog as HTMLElement).style.zIndex).toBe("1001");
+    expect(dialog?.classList.contains("is-contain")).toBe(true);
+    expect(dialog?.classList.contains("is-cover")).toBe(false);
     expect(dialog?.textContent).toContain("two.png");
     expect(dialog?.textContent).toContain("2 / 3");
     expect(document.querySelector("[aria-label='Previous image']")).not.toBeNull();
@@ -227,6 +229,22 @@ describe("image feed and lightbox", () => {
     });
     expect(document.querySelector("[role='dialog']")).toBeNull();
     expect(document.querySelector(".image-feed")).not.toBeNull();
+  });
+
+  it("opens fitted as contain, never cover-crop, and keeps Close at the top", async () => {
+    await render(0);
+    const dialog = document.querySelector("[role='dialog']");
+    const image = document.querySelector(".lightbox-stage img");
+    const close = document.querySelector(".lightbox-close");
+    if (!(dialog instanceof HTMLElement) || !(image instanceof HTMLImageElement) || !(close instanceof HTMLButtonElement)) {
+      throw new Error("missing fitted lightbox");
+    }
+    expect(dialog.className).toBe("lightbox is-contain");
+    expect(image.classList.contains("full")).toBe(true);
+    expect(image.getAttribute("style")).toBeNull();
+    expect(close.textContent).toContain("Close");
+    expect(dialog.querySelector(".lightbox-bar a")?.textContent).toContain("Open in new tab");
+    expect([...dialog.querySelectorAll("button")].some((button) => button.textContent === "Open in new window")).toBe(true);
   });
 });
 
