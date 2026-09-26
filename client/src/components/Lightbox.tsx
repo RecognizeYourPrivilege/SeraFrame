@@ -24,10 +24,9 @@ type LightboxProps = {
   onClose: () => void;
   /** When false the key handler no-ops. Unmounting the overlay does the same. */
   open?: boolean;
-  fit?: "cover" | "contain";
 };
 
-export function Lightbox({ items, index, onIndex, onClose, open = true, fit = "contain" }: LightboxProps) {
+export function Lightbox({ items, index, onIndex, onClose, open = true }: LightboxProps) {
   const item = items[index];
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -184,7 +183,7 @@ export function Lightbox({ items, index, onIndex, onClose, open = true, fit = "c
   return createPortal(
     <div
       ref={panelRef}
-      className={fit === "contain" ? "lightbox is-contain" : "lightbox is-cover"}
+      className="lightbox is-contain"
       style={{ zIndex: 1001 }}
       role="dialog"
       aria-modal="true"
